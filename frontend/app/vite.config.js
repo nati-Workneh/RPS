@@ -12,7 +12,7 @@ export default defineConfig({
     },
     server: {
         port: 5173,
-        fs: { allow: ["..", "../..", "../../main_menu_asset.png"] },
+        fs: { allow: ["..", "../..", "../../assets/source_art"] },
         proxy: {
             "/api": {
                 target: (_a = process.env.VITE_BACKEND_URL) !== null && _a !== void 0 ? _a : "http://127.0.0.1:8000",

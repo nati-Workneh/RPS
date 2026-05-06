@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import REVEAL_SECONDS
 from .schemas import (
     MatchCreateRequest,
+    MatchSettingsUpdateRequest,
     PlayerFlagRequest,
     PlayerMoveRequest,
     RevealCompleteRequest,
@@ -41,7 +42,7 @@ SQUAD_ROWS = 2
 UNITS_PER_SQUAD = BOARD_COLS * SQUAD_ROWS
 PLAYER_START_ROWS = [1, 2]
 AI_START_ROWS = [BOARD_ROWS, BOARD_ROWS - 1]
-TURN_DURATION_SECONDS = 10
+DEFAULT_TURN_DURATION_SECONDS = 10
 DUEL_TURN_BUFFER_SECONDS = 2
 
 WEAPONS: list[Weapon] = ["rock", "paper", "scissors"]
@@ -184,8 +185,9 @@ def resolve_reveal_timeout(match_state: dict[str, Any]) -> bool:
     return True
 
 
-def set_turn_deadline(match_state: dict[str, Any], seconds: int = TURN_DURATION_SECONDS) -> None:
-    match_state["turn_ends_at"] = time.time() + seconds
+def set_turn_deadline(match_state: dict[str, Any], seconds: int | None = None) -> None:
+    deadline_seconds = seconds if seconds is not None else match_state["turn_duration_seconds"]
+    match_state["turn_ends_at"] = time.time() + deadline_seconds
 
 
 def timed_turn_owner(match_state: dict[str, Any]) -> Owner | None:
@@ -284,6 +286,7 @@ def build_player_view(match_state: dict[str, Any]) -> dict[str, Any]:
         "phase":       match_state["phase"],
         "currentTurn": match_state["current_turn"],
         "difficulty":  match_state["difficulty"],
+        "turnDurationSeconds": match_state["turn_duration_seconds"],
         "message":     match_state["message"],
         "board":       board,
         "stats":       stats_view(match_state),
@@ -396,7 +399,7 @@ def apply_duel_outcome(
     if match_state["phase"] != "finished":
         match_state["phase"]        = "ai_turn"   if initiated_by == "player" else "player_turn"
         match_state["current_turn"] = "ai"         if initiated_by == "player" else "player"
-        set_turn_deadline(match_state, TURN_DURATION_SECONDS + DUEL_TURN_BUFFER_SECONDS)
+        set_turn_deadline(match_state, match_state["turn_duration_seconds"] + DUEL_TURN_BUFFER_SECONDS)
     match_state["last_duel"] = duel
 
 
@@ -543,7 +546,7 @@ def choose_ai_move(match_state: dict[str, Any]) -> tuple[dict[str, Any] | None, 
 
 # ── Match creation ─────────────────────────────────────────────────
 
-def create_match_state(difficulty: str) -> dict[str, Any]:
+def create_match_state(difficulty: str, turn_duration_seconds: int) -> dict[str, Any]:
     squads     = generate_squads()
     match_id   = uuid.uuid4().hex[:10]
     pieces     = deepcopy(squads["player"]) + deepcopy(squads["ai"])
@@ -551,6 +554,7 @@ def create_match_state(difficulty: str) -> dict[str, Any]:
     return {
         "id":           match_id,
         "difficulty":   difficulty,
+        "turn_duration_seconds": turn_duration_seconds,
         "phase":        "reveal",
         "current_turn": "player",
         "started_at":   started_at,
@@ -581,8 +585,17 @@ def generate_squad_endpoint(_payload: SquadGenerateRequest) -> dict[str, Any]:
 
 @app.post("/api/match/create")
 def create_match(payload: MatchCreateRequest) -> dict[str, Any]:
-    match_state = create_match_state(payload.difficulty)
+    match_state = create_match_state(payload.difficulty, payload.turn_duration_seconds)
     MATCHES[match_state["id"]] = match_state
+    return build_player_view(match_state)
+
+
+@app.post("/api/match/{match_id}/settings")
+def update_match_settings(match_id: str, payload: MatchSettingsUpdateRequest) -> dict[str, Any]:
+    match_state = match_or_404(match_id)
+    match_state["turn_duration_seconds"] = payload.turn_duration_seconds
+    if timed_turn_owner(match_state) is not None and match_state.get("turn_ends_at") is not None:
+        set_turn_deadline(match_state)
     return build_player_view(match_state)
 
 

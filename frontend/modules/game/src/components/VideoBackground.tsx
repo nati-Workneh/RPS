@@ -6,9 +6,10 @@ const VIDEO_SPEED = 1.6;
 
 interface VideoBackgroundProps {
   overlay: string;
+  fit?: "contain" | "cover";
 }
 
-export function VideoBackground({ overlay }: VideoBackgroundProps) {
+export function VideoBackground({ overlay, fit = "contain" }: VideoBackgroundProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export function VideoBackground({ overlay }: VideoBackgroundProps) {
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
           backgroundSize: "cover",
+          opacity: 0.62,
           pointerEvents: "none",
         }}
       />
@@ -61,7 +63,8 @@ export function VideoBackground({ overlay }: VideoBackgroundProps) {
           inset: 0,
           width: "100%",
           height: "100%",
-          objectFit: "cover",
+          objectFit: fit,
+          objectPosition: "center center",
           pointerEvents: "none",
         }}
       >

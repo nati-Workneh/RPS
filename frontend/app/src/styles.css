@@ -55,15 +55,15 @@ html, body, #root {
   --color-label-cpu:     #00A3FF;
 
   /* Sizing */
-  --cell-size:       clamp(44px, 12vw, 82px);
-  --unit-size:       calc(var(--cell-size) - 12px);
-  --sidebar-width:   clamp(200px, 30vw, 240px);
+  --cell-size:       clamp(52px, 10.6vw, 94px);
+  --unit-size:       calc(var(--cell-size) - 8px);
+  --sidebar-width:   clamp(236px, 28vw, 300px);
 
   /* Spacing */
   --space-xs:  6px;
   --space-sm:  10px;
-  --space-md:  16px;
-  --space-lg:  24px;
+  --space-md:  20px;
+  --space-lg:  28px;
 
   /* Radius */
   --radius-sm: 4px;
