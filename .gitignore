@@ -111,3 +111,4 @@ pnpm-debug.log*
 tmp/
 temp/
 memory-game/
+.vercel

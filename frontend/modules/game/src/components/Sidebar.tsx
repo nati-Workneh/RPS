@@ -258,8 +258,8 @@ export function Sidebar({
         <div style={{ ...GLASS, width: "100%", padding: "8px 12px" }}>
           <div style={{ fontFamily: "var(--font-ui)", fontSize: "0.62rem", color: "var(--color-text-muted)", lineHeight: "1.5" }}>
             {hasPlayerFlag
-              ? "הדגל הוצב. אפשר ללחוץ על חייל אחר כדי להעביר אותו לפני תחילת המשחק."
-              : "בהתחלה אפשר לערבב את החיילים, ואז ללחוץ על אחד החיילים שלך כדי לקבוע איפה יהיה הדגל."}
+              ? "Flag locked in. You can still click another soldier to move it before the match starts."
+              : "At the start, you can shuffle your soldiers and then click one of them to choose where your flag will be placed."}
           </div>
         </div>
       )}
@@ -319,7 +319,7 @@ export function Sidebar({
               transition:    "transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease",
             }}
           >
-            ערבב חיילים
+            Shuffle Soldiers
           </button>
         )}
 
@@ -344,7 +344,7 @@ export function Sidebar({
             transition:    "transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease",
           }}
         >
-          איפוס משחק
+          Reset Game
         </button>
 
         <button
@@ -366,7 +366,7 @@ export function Sidebar({
             transition:    "transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease",
           }}
         >
-          חזרה לתפריט הראשי
+          Back To Main Menu
         </button>
       </div>
 
