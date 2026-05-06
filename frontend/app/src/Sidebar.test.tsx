@@ -2,9 +2,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Sidebar } from "@game/components/Sidebar";
 
-const SHUFFLE_LABEL = "\u05e2\u05e8\u05d1\u05d1 \u05d7\u05d9\u05d9\u05dc\u05d9\u05dd";
-const RESET_LABEL = "\u05d0\u05d9\u05e4\u05d5\u05e1 \u05de\u05e9\u05d7\u05e7";
-const BACK_LABEL = "\u05d7\u05d6\u05e8\u05d4 \u05dc\u05ea\u05e4\u05e8\u05d9\u05d8 \u05d4\u05e8\u05d0\u05e9\u05d9";
+const SHUFFLE_LABEL = "Shuffle Soldiers";
+const RESET_LABEL = "Reset Game";
+const BACK_LABEL = "Back To Main Menu";
 
 describe("Sidebar", () => {
   it("should show the shuffle button only during reveal and call all handlers", () => {
