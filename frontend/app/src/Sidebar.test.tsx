@@ -29,6 +29,7 @@ describe("Sidebar", () => {
           phase: "reveal",
           currentTurn: "player",
           difficulty: "medium",
+          turnDurationSeconds: 10,
           message: "Your turn.",
           board: [
             {
@@ -105,6 +106,7 @@ describe("Sidebar", () => {
           phase: "reveal",
           currentTurn: "player",
           difficulty: "medium",
+          turnDurationSeconds: 10,
           message: "Your turn.",
           board: [
             {
@@ -162,6 +164,7 @@ describe("Sidebar", () => {
           phase: "player_turn",
           currentTurn: "player",
           difficulty: "medium",
+          turnDurationSeconds: 10,
           message: "Your turn.",
           board: [],
           stats: {

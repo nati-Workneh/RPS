@@ -8,6 +8,7 @@ const mockState = {
   phase: "reveal",
   currentTurn: "player",
   difficulty: "medium",
+  turnDurationSeconds: 10,
   message: "Test message",
   stats: {
     durationSeconds: 0,

@@ -51,6 +51,7 @@ export interface MatchView {
   phase: Phase;
   currentTurn: Owner | "none";
   difficulty: Difficulty;
+  turnDurationSeconds: number;
   message: string;
   board: Piece[];
   stats: MatchStats;

@@ -18,12 +18,12 @@ interface RefereePanelProps {
 // 4×3 spritesheet — background-position for each state
 // Col formula: col * (100 / (cols-1))  →  col * 33.33%
 // Row formula: row * (100 / (rows-1))  →  row * 50%
-const FRAME: Record<RefereeState, { pos: string; anim?: string; dur?: string }> = {
+const FRAME: Record<RefereeState, { pos: string }> = {
   idle:         { pos: "0%     0%"   },
   red_turn:     { pos: "0%     50%"  },                           // row 1 = pointing
   blue_turn:    { pos: "33.33% 50%"  },                           // row 1, col 1
-  battle:       { pos: "33.33% 0%",  anim: "refBattle",   dur: "0.4s infinite" },
-  player_wins:  { pos: "0%     0%",  anim: "refCheerSprite", dur: "0.6s infinite" },
+  battle:       { pos: "33.33% 0%"   },
+  player_wins:  { pos: "0%     0%"   },
   player_loses: { pos: "0%     100%" },                           // row 2 = fallen
 };
 
@@ -62,7 +62,7 @@ export function RefereePanel(props: RefereePanelProps) {
           width:              "72px",
           height:             "72px",
           backgroundPosition: frame.pos,
-          animation:          frame.anim ? `${frame.anim} ${frame.dur}` : "none",
+          animation:          "none",
           filter:             "drop-shadow(0 2px 6px rgba(0,0,0,0.4))",
           transition:         "background-position 0.1s steps(1)",
         }}

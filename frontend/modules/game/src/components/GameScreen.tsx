@@ -1,24 +1,23 @@
 import { useGame } from "../hooks/useGame";
 import { useAudio } from "../hooks/useAudio";
-import { TURN_DURATION_SECONDS } from "@shared/constants";
+
 import { GameBoard } from "./GameBoard";
 import { PlayerNameLabel } from "./PlayerNameLabel";
 import { Sidebar } from "./Sidebar";
 import { DuelOverlay } from "./DuelOverlay";
 import { GameOverScreen } from "./GameOverScreen";
 import { StartScreen } from "./StartScreen";
-import { RefereePanel } from "./RefereePanel";
 import { FallingLeavesBackground } from "./FallingLeavesBackground";
 import { VideoBackground } from "./VideoBackground";
 
 const GAME_BACKGROUND_OVERLAY = "linear-gradient(rgba(10, 14, 10, 0.64), rgba(10, 14, 10, 0.84))";
 
 const REVEAL_PICK_FLAG_LABEL =
-  "\u05e2\u05e8\u05d1\u05d1 \u05d7\u05d9\u05d9\u05dc\u05d9\u05dd \u05d5\u05d0\u05d6 \u05dc\u05d7\u05e5 \u05e2\u05dc \u05d0\u05d7\u05d3 \u05d4\u05d7\u05d9\u05d9\u05dc\u05d9\u05dd \u05e9\u05dc\u05da \u05db\u05d3\u05d9 \u05dc\u05d1\u05d7\u05d5\u05e8 \u05d3\u05d2\u05dc";
+  "Shuffle your soldiers, then click one of them to choose your flag";
 const REVEAL_FLAG_SELECTED_LABEL =
-  "\u05d4\u05d3\u05d2\u05dc \u05e0\u05d1\u05d7\u05e8. \u05d6\u05db\u05d5\u05e8 \u05d0\u05ea \u05e0\u05e9\u05e7\u05d9 \u05d4\u05d0\u05d5\u05d9\u05d1";
+  "Flag selected. Memorize the enemy weapons";
 const REVEAL_REQUIRED_LABEL =
-  "\u05d1\u05d7\u05e8 \u05d3\u05d2\u05dc \u05db\u05d3\u05d9 \u05dc\u05d4\u05ea\u05d7\u05d9\u05dc \u05d0\u05ea \u05d4\u05de\u05e9\u05d7\u05e7";
+  "Pick a flag to start the match";
 
 export function GameScreen() {
   const {
@@ -52,7 +51,7 @@ export function GameScreen() {
   const hasPlayerFlag = !!match?.board.some(
     (piece) => piece.owner === "player" && piece.alive && piece.role === "flag",
   );
-  const displayTurnSeconds = Math.min(turnSecondsLeft, TURN_DURATION_SECONDS);
+  const displayTurnSeconds = Math.min(turnSecondsLeft, match?.turnDurationSeconds ?? 10);
 
   useAudio(match ? {
     phase,
@@ -89,7 +88,7 @@ export function GameScreen() {
           backgroundColor: "var(--color-board-bg)",
         }}
       >
-        <VideoBackground overlay={GAME_BACKGROUND_OVERLAY} />
+        <VideoBackground overlay={GAME_BACKGROUND_OVERLAY} fit="contain" />
 
         <div style={{ fontFamily: "var(--font-heading)", fontSize: "1.6rem", color: "var(--color-danger)" }}>
           Error
@@ -156,10 +155,10 @@ export function GameScreen() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "var(--space-md)",
+        padding: "clamp(18px, 2vw, 28px)",
       }}
     >
-      <VideoBackground overlay={GAME_BACKGROUND_OVERLAY} />
+      <VideoBackground overlay={GAME_BACKGROUND_OVERLAY} fit="contain" />
       <FallingLeavesBackground />
 
       <div
@@ -170,9 +169,9 @@ export function GameScreen() {
           alignItems: "stretch",
           justifyContent: "center",
           flexWrap: "wrap",
-          gap: "var(--space-md)",
+          gap: "clamp(18px, 2vw, 30px)",
           width: "100%",
-          maxWidth: "min(1100px, 100%)",
+          maxWidth: "min(1360px, 100%)",
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 }}>
@@ -201,7 +200,7 @@ export function GameScreen() {
                   padding: "7px",
                   background: "rgba(80,40,0,0.7)",
                   fontFamily: "var(--font-heading)",
-                  fontSize: "1rem",
+                  fontSize: "1.1rem",
                   color: "var(--color-warning)",
                   textAlign: "center",
                   letterSpacing: "2px",
@@ -223,7 +222,7 @@ export function GameScreen() {
                   padding: "7px",
                   background: "rgba(0,0,60,0.7)",
                   fontFamily: "var(--font-heading)",
-                  fontSize: "1rem",
+                  fontSize: "1.1rem",
                   color: "var(--color-label-cpu)",
                   textAlign: "center",
                   letterSpacing: "2px",
@@ -257,23 +256,23 @@ export function GameScreen() {
 
           <div
             style={{
-              marginTop: "8px",
+              marginTop: "12px",
               width: "100%",
-              padding: "7px 16px",
+              padding: "10px 18px",
               background: "rgba(0, 0, 0, 0.45)",
               borderRadius: "20px",
               border: "1px solid rgba(255,255,255,0.07)",
               display: "flex",
               alignItems: "center",
-              gap: "8px",
-              minHeight: "34px",
+              gap: "10px",
+              minHeight: "42px",
             }}
           >
-            <span style={{ fontSize: "0.7rem", opacity: 0.5 }}>*</span>
+            <span style={{ fontSize: "0.82rem", opacity: 0.5 }}>*</span>
             <span
               style={{
                 fontFamily: "var(--font-ui)",
-                fontSize: "0.7rem",
+                fontSize: "0.84rem",
                 color: "var(--color-text-muted)",
                 flex: 1,
               }}
@@ -287,8 +286,8 @@ export function GameScreen() {
                 onClick={skipReveal}
                 style={{
                   fontFamily: "var(--font-ui)",
-                  fontSize: "0.65rem",
-                  padding: "3px 10px",
+                  fontSize: "0.74rem",
+                  padding: "5px 12px",
                   background: "rgba(255,215,0,0.15)",
                   color: "#FFD700",
                   border: "1px solid rgba(255,215,0,0.4)",
@@ -320,27 +319,6 @@ export function GameScreen() {
         </div>
       </div>
 
-      <div
-        style={{
-          position: "fixed",
-          bottom: "20px",
-          right: "20px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "6px",
-          zIndex: 50,
-          pointerEvents: "none",
-          userSelect: "none",
-        }}
-      >
-        <RefereePanel
-          phase={phase}
-          currentTurn={match.currentTurn}
-          showDuel={showDuel}
-          result={match.result}
-        />
-      </div>
     </div>
   );
 }

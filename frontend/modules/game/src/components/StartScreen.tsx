@@ -73,7 +73,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
         overflowX: "hidden",
       }}
     >
-      <VideoBackground overlay={GAME_BACKGROUND_OVERLAY} />
+      <VideoBackground overlay={GAME_BACKGROUND_OVERLAY} fit="contain" />
       <FallingLeavesBackground />
 
       <div
@@ -90,13 +90,13 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
           position: "relative",
           zIndex: 1,
           minHeight: "100vh",
-          width: "min(1180px, 100%)",
+          width: "min(1320px, 100%)",
           margin: "0 auto",
-          padding: "clamp(8px, 1.1vw, 12px) clamp(14px, 2vw, 24px) clamp(6px, 0.8vw, 10px)",
+          padding: "clamp(12px, 1.5vw, 18px) clamp(18px, 2.4vw, 32px) clamp(10px, 1.1vw, 14px)",
           display: "flex",
           flexDirection: "column",
           justifyContent: "flex-start",
-          gap: "clamp(4px, 0.7vw, 8px)",
+          gap: "clamp(8px, 1vw, 12px)",
         }}
       >
         <div
@@ -104,7 +104,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: "clamp(2px, 0.45vw, 5px)",
+            gap: "clamp(4px, 0.55vw, 7px)",
           }}
         >
           <img
@@ -112,7 +112,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
             alt="Squad RPS"
             style={{
               display: "block",
-              width: "clamp(300px, 36vw, 540px)",
+              width: "clamp(360px, 40vw, 620px)",
               objectFit: "contain",
               filter: "drop-shadow(0 18px 38px rgba(0,0,0,0.35))",
             }}
@@ -144,7 +144,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
           <div
             style={{
               fontFamily: "var(--font-ui)",
-              fontSize: "clamp(0.76rem, 0.95vw, 0.9rem)",
+              fontSize: "clamp(0.92rem, 1.08vw, 1.04rem)",
               letterSpacing: "0.16em",
               textTransform: "uppercase",
               color: "rgba(255,255,255,0.84)",
@@ -158,8 +158,8 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
           <section
             ref={rulesRef}
             style={{
-              width: "min(700px, 100%)",
-              padding: "10px 14px",
+              width: "min(860px, 100%)",
+              padding: "14px 18px",
               borderRadius: "18px",
               background: "linear-gradient(180deg, rgba(12,16,12,0.56), rgba(8,10,8,0.42))",
               border: "1px solid rgba(255,255,255,0.08)",
@@ -167,14 +167,14 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
               boxShadow: "0 18px 40px rgba(0,0,0,0.24)",
               display: "flex",
               flexDirection: "column",
-              gap: "3px",
+              gap: "6px",
               textAlign: "center",
             }}
           >
             <div
               style={{
                 fontFamily: "var(--font-heading)",
-                fontSize: "clamp(0.92rem, 1.1vw, 1.02rem)",
+                fontSize: "clamp(1.14rem, 1.4vw, 1.32rem)",
                 color: "#F4D377",
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
@@ -187,13 +187,13 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
               <div
                 key={rule}
                 style={{
-                  padding: "5px 10px",
+                  padding: "7px 13px",
                   borderRadius: "12px",
                   background: "rgba(255,255,255,0.04)",
                   border: "1px solid rgba(255,255,255,0.06)",
                   fontFamily: "var(--font-ui)",
-                  fontSize: "0.68rem",
-                  lineHeight: "1.22",
+                  fontSize: "clamp(0.92rem, 1.06vw, 1.02rem)",
+                  lineHeight: "1.38",
                   color: "var(--color-text-muted)",
                 }}
               >
@@ -218,7 +218,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                 alt="Choose difficulty"
                 style={{
                   display: "block",
-                  width: "clamp(260px, 28vw, 360px)",
+                  width: "clamp(300px, 31vw, 420px)",
                   objectFit: "contain",
                   filter: "drop-shadow(0 10px 22px rgba(0,0,0,0.28))",
                   marginTop: "-18px",
@@ -253,7 +253,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
             <div
               style={{
                 width: "100%",
-                maxWidth: "920px",
+                maxWidth: "1020px",
                 display: "grid",
                 gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                 gap: "0px",
@@ -275,7 +275,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                     style={{
                       position: "relative",
                       width: "100%",
-                      maxWidth: "345px",
+                      maxWidth: "380px",
                       justifySelf: "center",
                       padding: 0,
                       border: "none",
@@ -302,10 +302,10 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                         display: "block",
                         width: "100%",
                         objectFit: "contain",
-                        marginTop: "-52px",
-                        marginBottom: "-26px",
-                        marginLeft: "-28px",
-                        marginRight: "-28px",
+                        marginTop: "-54px",
+                        marginBottom: "-18px",
+                        marginLeft: "-18px",
+                        marginRight: "-18px",
                         filter: isSelected ? `drop-shadow(0 14px 26px ${glow}) brightness(1.06)` : "drop-shadow(0 10px 18px rgba(0,0,0,0.2))",
                         transition: "filter 0.16s ease",
                       }}
@@ -353,7 +353,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
             <div
               style={{
                 width: "100%",
-                maxWidth: "920px",
+                maxWidth: "1020px",
                 display: "grid",
                 gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                 alignItems: "start",
@@ -390,12 +390,12 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                   src={START_BUTTON_IMAGE}
                   alt=""
                   aria-hidden="true"
-                style={{
-                  display: "block",
-                  width: "clamp(255px, 22vw, 330px)",
-                  objectFit: "contain",
-                  marginTop: "-26px",
-                  marginBottom: "-38px",
+                  style={{
+                    display: "block",
+                    width: "clamp(290px, 25vw, 370px)",
+                    objectFit: "contain",
+                    marginTop: "-20px",
+                    marginBottom: "-38px",
                     filter: loading ? "grayscale(0.15) brightness(0.92)" : "drop-shadow(0 0 16px rgba(205, 255, 92, 0.24))",
                   }}
                   onError={(e) => {
@@ -465,7 +465,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
               alt="How to play"
               style={{
                 display: "block",
-                width: "clamp(150px, 13vw, 200px)",
+                width: "clamp(170px, 15vw, 220px)",
                 objectFit: "contain",
               }}
             />
@@ -505,7 +505,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                 alt="Settings"
                 style={{
                   display: "block",
-                  width: "clamp(150px, 13vw, 200px)",
+                  width: "clamp(170px, 15vw, 220px)",
                   objectFit: "contain",
                 }}
               />
@@ -536,7 +536,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                 alt="Leaderboard"
                 style={{
                   display: "block",
-                  width: "clamp(150px, 14vw, 210px)",
+                  width: "clamp(175px, 15.5vw, 225px)",
                   objectFit: "contain",
                 }}
               />

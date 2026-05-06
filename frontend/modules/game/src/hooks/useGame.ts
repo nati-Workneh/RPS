@@ -4,6 +4,16 @@ import {
 } from "@shared/types";
 import { BOARD_COLS, BOARD_ROWS } from "@shared/constants";
 import { audioManager, JUMP_DURATION_MS } from "../utils/audioManager";
+import {
+  createMatch as engineCreateMatch,
+  completeReveal as engineCompleteReveal,
+  shufflePlayerPiecesEngine,
+  choosePlayerFlagEngine,
+  playerMoveEngine,
+  tieRepickEngine,
+  aiMoveEngine,
+  turnTimeoutEngine,
+} from "../engine/gameEngine";
 
 export type UiPhase = "WAITING_FOR_PLAYER" | "MOVING" | "BATTLE" | "GAME_OVER" | Phase;
 
@@ -41,18 +51,7 @@ const DIFFICULTIES: Array<{ id: Difficulty; label: string; detail: string }> = [
   { id: "hard",   label: "Hard",   detail: "AI pressures known favorable matchups." },
 ];
 
-async function postJson<T>(url: string, body?: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method:  "POST",
-    headers: { "content-type": "application/json" },
-    body:    body === undefined ? "{}" : JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const fallback = await response.text();
-    throw new Error(fallback || `Request failed with ${response.status}.`);
-  }
-  return response.json() as Promise<T>;
-}
+const DEFAULT_TURN_DURATION = 10;
 
 function computeValidMoves(piece: Piece, board: Piece[]): Array<{ row: number; col: number }> {
   const occupied = new Map(board.filter(p => p.alive).map(p => [`${p.row}-${p.col}`, p]));
@@ -92,7 +91,6 @@ export function useGame(): UseGameReturn {
     [match],
   );
 
-  // ── Valid moves for selected piece ───────────────────────────────
   const validMoves = useMemo(() => {
     if (!match || !selectedPieceId || match.phase !== "player_turn") return [];
     const piece = match.board.find(p => p.id === selectedPieceId && p.alive);
@@ -147,14 +145,14 @@ export function useGame(): UseGameReturn {
   useEffect(() => {
     if (!match || match.phase !== "reveal") return;
     if (Date.now() / 1000 < match.revealEndsAt) return;
-    void completeReveal();
+    void handleCompleteReveal();
   }, [match, revealSecondsLeft]);
 
   useEffect(() => {
     if (!match || !isTimedTurnPhase(match.phase) || !match.turnEndsAt || timeoutInFlightRef.current) return;
     if (Date.now() / 1000 < match.turnEndsAt) return;
     timeoutInFlightRef.current = true;
-    void submitTurnTimeout().finally(() => {
+    void handleTurnTimeout().finally(() => {
       timeoutInFlightRef.current = false;
     });
   }, [match, turnSecondsLeft]);
@@ -181,20 +179,12 @@ export function useGame(): UseGameReturn {
   useEffect(() => {
     if (!match || match.phase !== "ai_turn" || aiInFlightRef.current || showDuel) return;
     aiInFlightRef.current = true;
-    const timeout = window.setTimeout(async () => {
-      const url = `/api/match/${match.matchId}/turn/ai-move`;
+    const timeout = window.setTimeout(() => {
       try {
-        const next = await postJson<MatchView>(url);
+        const next = aiMoveEngine(match.matchId);
         applyState(next);
-      } catch {
-        // First attempt failed — retry once after a short pause before showing an error.
-        await new Promise<void>(res => window.setTimeout(res, 600));
-        try {
-          const next = await postJson<MatchView>(url);
-          applyState(next);
-        } catch (cause) {
-          setError(cause instanceof Error ? cause.message : "AI move failed.");
-        }
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "AI move failed.");
       } finally {
         aiInFlightRef.current = false;
       }
@@ -205,7 +195,6 @@ export function useGame(): UseGameReturn {
   // ── Board cells ───────────────────────────────────────────────────
   const boardCells = useMemo(() => {
     const lookup = new Map<string, Piece>();
-    // Only alive pieces occupy board squares; dead pieces must not ghost.
     (match?.board ?? []).filter(p => p.alive).forEach(p => lookup.set(`${p.row}-${p.col}`, p));
     const cells: BoardCell[] = [];
     for (let row = BOARD_ROWS; row >= 1; row -= 1) {
@@ -217,7 +206,7 @@ export function useGame(): UseGameReturn {
   }, [match]);
 
   // ── Actions ───────────────────────────────────────────────────────
-  async function createMatch(clearCurrentMatch: boolean) {
+  async function createMatchInternal(clearCurrentMatch: boolean) {
     setLoading(true);
     setError(null);
     setSelectedPieceId(null);
@@ -230,42 +219,39 @@ export function useGame(): UseGameReturn {
       setMatch(null);
     }
     try {
-      const created = await postJson<MatchView>("/api/match/create", { difficulty: selectedDifficulty });
+      const created = engineCreateMatch(selectedDifficulty, DEFAULT_TURN_DURATION);
       setMatch(created);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to connect to game server. Is the backend running?");
+      setError(cause instanceof Error ? cause.message : "Failed to start game.");
     } finally {
       setLoading(false);
     }
   }
 
   async function startMatch() {
-    await createMatch(false);
+    await createMatchInternal(false);
   }
 
   async function resetMatch() {
-    await createMatch(true);
+    await createMatchInternal(true);
   }
 
-  async function completeReveal() {
+  async function handleCompleteReveal() {
     const current = matchRef.current;
     if (!current || current.phase !== "reveal") return;
     try {
-      const next = await postJson<MatchView>(`/api/match/${current.matchId}/reveal/complete`, { confirmed: true });
+      const next = engineCompleteReveal(current.matchId);
       setMatch(next);
     } catch (cause) {
-      // Surface the error so the player can see it and use the manual Skip button
       const msg = cause instanceof Error ? cause.message : "Reveal transition failed.";
-      console.error("[useGame] completeReveal failed:", cause);
       setError(`Could not advance past reveal phase: ${msg}. Use the Skip button or restart.`);
     }
   }
 
-  // Public escape-hatch: lets the UI render a "Skip" / "Proceed" button
   async function skipReveal() {
     if (!hasPlayerFlag) return;
     setError(null);
-    await completeReveal();
+    await handleCompleteReveal();
   }
 
   async function shufflePlayerPieces() {
@@ -274,7 +260,7 @@ export function useGame(): UseGameReturn {
     setLoading(true);
     setError(null);
     try {
-      const next = await postJson<MatchView>(`/api/match/${current.matchId}/shuffle/player`);
+      const next = shufflePlayerPiecesEngine(current.matchId);
       setMatch(next);
       audioManager.unlock();
       audioManager.play("shuffle");
@@ -291,7 +277,7 @@ export function useGame(): UseGameReturn {
     setLoading(true);
     setError(null);
     try {
-      const next = await postJson<MatchView>(`/api/match/${current.matchId}/flag/player`, { pieceId });
+      const next = choosePlayerFlagEngine(current.matchId, pieceId);
       setMatch(next);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Flag selection failed.");
@@ -300,11 +286,11 @@ export function useGame(): UseGameReturn {
     }
   }
 
-  async function submitTurnTimeout() {
+  async function handleTurnTimeout() {
     const current = matchRef.current;
     if (!current || !isTimedTurnPhase(current.phase)) return;
     try {
-      const next = await postJson<MatchView>(`/api/match/${current.matchId}/turn/timeout`);
+      const next = turnTimeoutEngine(current.matchId);
       setMatch(next);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Turn timeout handling failed.");
@@ -317,17 +303,13 @@ export function useGame(): UseGameReturn {
     setLoading(true);
     setError(null);
 
-    // Trigger jump animation + sound — fire before API call for instant feedback
     setMovingPieceId(selectedPieceId);
     audioManager.unlock();
     audioManager.playJump();
     window.setTimeout(() => setMovingPieceId(null), JUMP_DURATION_MS);
 
     try {
-      const next = await postJson<MatchView>(
-        `/api/match/${current.matchId}/turn/player-move`,
-        { pieceId: selectedPieceId, targetRow, targetCol },
-      );
+      const next = playerMoveEngine(current.matchId, selectedPieceId, targetRow, targetCol);
       applyState(next);
       setSelectedPieceId(null);
     } catch (cause) {
@@ -343,7 +325,7 @@ export function useGame(): UseGameReturn {
     setLoading(true);
     setError(null);
     try {
-      const next = await postJson<MatchView>(`/api/match/${current.matchId}/turn/tie-repick`, { weapon });
+      const next = tieRepickEngine(current.matchId, weapon);
       applyState(next);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Repick failed.");
@@ -353,7 +335,6 @@ export function useGame(): UseGameReturn {
   }
 
   function onPieceClick(piece: Piece) {
-    // Debug: log every click so developers can verify events reach this handler
     console.debug("[onPieceClick] piece=%s owner=%s phase=%s alive=%s", piece.id, piece.owner, match?.phase, piece.alive);
 
     if (match?.phase === "reveal") {
@@ -363,10 +344,7 @@ export function useGame(): UseGameReturn {
       return;
     }
 
-    if (!match || showDuel || match.phase !== "player_turn" || !piece.alive) {
-      console.debug("[onPieceClick] blocked — phase=%s showDuel=%s alive=%s", match?.phase, showDuel, piece.alive);
-      return;
-    }
+    if (!match || showDuel || match.phase !== "player_turn" || !piece.alive) return;
 
     if (piece.owner === "player") {
       if (!selectablePieceIds.has(piece.id)) return;
@@ -374,7 +352,6 @@ export function useGame(): UseGameReturn {
       return;
     }
 
-    // Enemy piece — move there if it's a valid target
     if (piece.owner === "ai" && selectedPieceId && validMoveSet.has(`${piece.row}-${piece.col}`)) {
       void movePiece(piece.row, piece.col);
     }
@@ -383,7 +360,6 @@ export function useGame(): UseGameReturn {
   function onCellClick(row: number, col: number) {
     if (!match || showDuel || match.phase !== "player_turn" || !selectedPieceId) return;
     if (!validMoveSet.has(`${row}-${col}`)) return;
-    // Only handle empty cells here; piece clicks are handled by onPieceClick
     const occupant = match.board.find(p => p.alive && p.row === row && p.col === col);
     if (!occupant) void movePiece(row, col);
   }

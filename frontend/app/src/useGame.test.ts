@@ -27,6 +27,7 @@ describe("useGame smoke test", () => {
       phase: "player_turn" as const,
       currentTurn: "player" as const,
       difficulty: "easy" as const,
+      turnDurationSeconds: 10,
       message: "Your turn.",
       board: [
         {
@@ -107,6 +108,7 @@ describe("useGame smoke test", () => {
       phase: "player_turn" as const,
       currentTurn: "player" as const,
       difficulty: "easy" as const,
+      turnDurationSeconds: 10,
       message: "Your turn.",
       board: [
         {
@@ -203,6 +205,7 @@ describe("useGame smoke test", () => {
       phase: "reveal" as const,
       currentTurn: "player" as const,
       difficulty: "easy" as const,
+      turnDurationSeconds: 10,
       message: "Memorize the enemy squad before the reveal timer ends.",
       board: [
         {
@@ -295,6 +298,7 @@ describe("useGame smoke test", () => {
       phase: "reveal" as const,
       currentTurn: "player" as const,
       difficulty: "easy" as const,
+      turnDurationSeconds: 10,
       message: "Memorize the enemy squad before the reveal timer ends.",
       board: [
         {
@@ -398,6 +402,7 @@ describe("useGame smoke test", () => {
       phase: "reveal" as const,
       currentTurn: "player" as const,
       difficulty: "easy" as const,
+      turnDurationSeconds: 10,
       message: "Memorize the enemy squad before the reveal timer ends.",
       board: [
         {
@@ -481,6 +486,7 @@ describe("useGame smoke test", () => {
       phase: "player_turn" as const,
       currentTurn: "player" as const,
       difficulty: "easy" as const,
+      turnDurationSeconds: 10,
       message: "Your turn.",
       board: [
         {
@@ -564,6 +570,7 @@ describe("useGame smoke test", () => {
       phase: "ai_turn" as const,
       currentTurn: "ai" as const,
       difficulty: "easy" as const,
+      turnDurationSeconds: 10,
       message: "AI is choosing...",
       board: [
         {
