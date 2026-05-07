@@ -40,8 +40,23 @@ class AudioManager {
   private unlocked         = false;
   private bgmShouldPlay    = false;
   private activeSfx        = 0;
+  private musicMuted       = false;
+  private temporaryMusicMuted = false;
+  private musicVolume      = 1;
   private fadeTimer:       number | null = null;
   private stopFadeTimer:   ReturnType<typeof setTimeout> | null = null;
+
+  private get isMusicEffectivelyMuted() {
+    return this.musicMuted || this.temporaryMusicMuted;
+  }
+
+  private get normalBgmVolume() {
+    return this.isMusicEffectivelyMuted ? 0 : BGM_NORMAL_VOL * this.musicVolume;
+  }
+
+  private get duckedBgmVolume() {
+    return this.isMusicEffectivelyMuted ? 0 : BGM_DUCKED_VOL * this.musicVolume;
+  }
 
   // ── Unlock (first user gesture) ─────────────────────────────────
   unlock() {
@@ -53,7 +68,7 @@ class AudioManager {
     this.bgm.volume = 0;
     this.bgmShouldPlay = true;
     void this.bgm.play().catch(() => {});
-    this._fadeTo(BGM_NORMAL_VOL, FADE_IN_MS);   // gentle fade-in from silence
+    this._fadeTo(this.normalBgmVolume, FADE_IN_MS);   // gentle fade-in from silence
 
     for (const [key, path] of Object.entries(SFX_PATHS) as [SfxKey, string][]) {
       const el    = new Audio(path);
@@ -68,6 +83,49 @@ class AudioManager {
     if (!on) this.stopBgm();
   }
 
+  setMusicMuted(muted: boolean) {
+    this.musicMuted = muted;
+    if (!this.bgm) return;
+
+    if (this.isMusicEffectivelyMuted) {
+      this._fadeTo(0, 180);
+      return;
+    }
+
+    if (this.bgmShouldPlay) {
+      if (this.bgm.paused) {
+        void this.bgm.play().catch(() => {});
+      }
+      this._fadeTo(this.activeSfx > 0 ? this.duckedBgmVolume : this.normalBgmVolume, 220);
+    }
+  }
+
+  setTemporaryMusicMuted(muted: boolean) {
+    this.temporaryMusicMuted = muted;
+    if (!this.bgm) return;
+
+    if (this.isMusicEffectivelyMuted) {
+      this._fadeTo(0, 180);
+      return;
+    }
+
+    if (this.bgmShouldPlay) {
+      if (this.bgm.paused) {
+        void this.bgm.play().catch(() => {});
+      }
+      this._fadeTo(this.activeSfx > 0 ? this.duckedBgmVolume : this.normalBgmVolume, 220);
+    }
+  }
+
+  setMusicVolume(volume: number) {
+    this.musicVolume = Math.min(1, Math.max(0, volume));
+    if (!this.bgm || this.isMusicEffectivelyMuted) return;
+
+    if (this.bgmShouldPlay && !this.bgm.paused) {
+      this._fadeTo(this.activeSfx > 0 ? this.duckedBgmVolume : this.normalBgmVolume, 180);
+    }
+  }
+
   // ── BGM controls ────────────────────────────────────────────────
   /** Restart BGM (e.g. new match after game-over). No-op if already playing. */
   playBgm() {
@@ -76,7 +134,7 @@ class AudioManager {
     if (this.bgm.paused && this.activeSfx === 0) {
       this.bgm.currentTime = 0;
       void this.bgm.play().catch(() => {});
-      this._fadeTo(BGM_NORMAL_VOL, FADE_IN_MS);
+      this._fadeTo(this.normalBgmVolume, FADE_IN_MS);
     }
   }
 
@@ -98,8 +156,8 @@ class AudioManager {
 
     this.activeSfx++;
     // Duck — only if BGM is audibly running
-    if (this.bgm && !this.bgm.paused && this.bgm.volume > BGM_DUCKED_VOL) {
-      this._fadeTo(BGM_DUCKED_VOL, DUCK_MS);
+    if (this.bgm && !this.bgm.paused && this.bgm.volume > this.duckedBgmVolume) {
+      this._fadeTo(this.duckedBgmVolume, DUCK_MS);
     }
 
     el.currentTime = 0;
@@ -110,7 +168,7 @@ class AudioManager {
       this.activeSfx = Math.max(0, this.activeSfx - 1);
       // Restore only when every SFX has finished
       if (this.activeSfx === 0 && this.bgmShouldPlay && this.bgm && !this.bgm.paused) {
-        this._fadeTo(BGM_NORMAL_VOL, UNDUCK_MS);
+        this._fadeTo(this.normalBgmVolume, UNDUCK_MS);
       }
     };
 

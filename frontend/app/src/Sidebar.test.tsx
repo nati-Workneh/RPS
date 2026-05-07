@@ -5,12 +5,14 @@ import { Sidebar } from "@game/components/Sidebar";
 const SHUFFLE_LABEL = "Shuffle Soldiers";
 const RESET_LABEL = "Reset Game";
 const BACK_LABEL = "Back To Main Menu";
+const SETTINGS_LABEL = "Open settings";
 
 describe("Sidebar", () => {
   it("should show the shuffle button only during reveal and call all handlers", () => {
     const onShufflePositions = vi.fn().mockResolvedValue(undefined);
     const onResetGame = vi.fn().mockResolvedValue(undefined);
     const onBackToMenu = vi.fn();
+    const onOpenSettings = vi.fn();
 
     render(
       <Sidebar
@@ -29,7 +31,7 @@ describe("Sidebar", () => {
           phase: "reveal",
           currentTurn: "player",
           difficulty: "medium",
-          turnDurationSeconds: 10,
+          turnDurationSeconds: 15,
           message: "Your turn.",
           board: [
             {
@@ -76,16 +78,19 @@ describe("Sidebar", () => {
         onShufflePositions={onShufflePositions}
         onResetGame={onResetGame}
         onBackToMenu={onBackToMenu}
+        onOpenSettings={onOpenSettings}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: SHUFFLE_LABEL }));
     fireEvent.click(screen.getByRole("button", { name: RESET_LABEL }));
     fireEvent.click(screen.getByRole("button", { name: BACK_LABEL }));
+    fireEvent.click(screen.getByRole("button", { name: SETTINGS_LABEL }));
 
     expect(onShufflePositions).toHaveBeenCalledTimes(1);
     expect(onResetGame).toHaveBeenCalledTimes(1);
     expect(onBackToMenu).toHaveBeenCalledTimes(1);
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
   it("should hide the shuffle button after the player chooses a flag", () => {
@@ -106,7 +111,7 @@ describe("Sidebar", () => {
           phase: "reveal",
           currentTurn: "player",
           difficulty: "medium",
-          turnDurationSeconds: 10,
+          turnDurationSeconds: 15,
           message: "Your turn.",
           board: [
             {
@@ -140,6 +145,7 @@ describe("Sidebar", () => {
         onShufflePositions={vi.fn().mockResolvedValue(undefined)}
         onResetGame={vi.fn().mockResolvedValue(undefined)}
         onBackToMenu={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
 
@@ -151,7 +157,7 @@ describe("Sidebar", () => {
       <Sidebar
         phase="player_turn"
         revealTimer={0}
-        turnTimer={10}
+        turnTimer={15}
         stats={{
           durationSeconds: 12,
           playerDuelsWon: 2,
@@ -164,7 +170,7 @@ describe("Sidebar", () => {
           phase: "player_turn",
           currentTurn: "player",
           difficulty: "medium",
-          turnDurationSeconds: 10,
+          turnDurationSeconds: 15,
           message: "Your turn.",
           board: [],
           stats: {
@@ -175,7 +181,7 @@ describe("Sidebar", () => {
             decoyAbsorbed: 1,
           },
           revealEndsAt: 0,
-          turnEndsAt: Date.now() / 1000 + 10,
+          turnEndsAt: Date.now() / 1000 + 15,
           duel: null,
           result: null,
         }}
@@ -184,6 +190,7 @@ describe("Sidebar", () => {
         onShufflePositions={vi.fn().mockResolvedValue(undefined)}
         onResetGame={vi.fn().mockResolvedValue(undefined)}
         onBackToMenu={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
 

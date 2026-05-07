@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   Piece, BoardCell, Phase, DuelSummary, MatchView, MatchStats, Difficulty, Weapon, Owner
 } from "@shared/types";
-import { BOARD_COLS, BOARD_ROWS } from "@shared/constants";
+import { BOARD_COLS, BOARD_ROWS, getTurnDurationForDifficulty } from "@shared/constants";
 import { audioManager, JUMP_DURATION_MS } from "../utils/audioManager";
 import {
   createMatch as engineCreateMatch,
@@ -13,6 +13,7 @@ import {
   tieRepickEngine,
   aiMoveEngine,
   turnTimeoutEngine,
+  updateTurnDurationEngine,
 } from "../engine/gameEngine";
 
 export type UiPhase = "WAITING_FOR_PLAYER" | "MOVING" | "BATTLE" | "GAME_OVER" | Phase;
@@ -45,13 +46,15 @@ export interface UseGameReturn {
   skipReveal:        () => Promise<void>;
 }
 
+interface UseGameOptions {
+  turnDurations?: Record<Difficulty, number>;
+}
+
 const DIFFICULTIES: Array<{ id: Difficulty; label: string; detail: string }> = [
   { id: "easy",   label: "Easy",   detail: "AI plays mostly random valid moves." },
   { id: "medium", label: "Medium", detail: "AI uses remembered reveals when possible." },
   { id: "hard",   label: "Hard",   detail: "AI pressures known favorable matchups." },
 ];
-
-const DEFAULT_TURN_DURATION = 10;
 
 function computeValidMoves(piece: Piece, board: Piece[]): Array<{ row: number; col: number }> {
   const occupied = new Map(board.filter(p => p.alive).map(p => [`${p.row}-${p.col}`, p]));
@@ -69,7 +72,14 @@ function isTimedTurnPhase(phase: Phase): boolean {
   return phase === "player_turn" || phase === "ai_turn" || phase === "repick";
 }
 
-export function useGame(): UseGameReturn {
+const DEFAULT_TURN_DURATIONS: Record<Difficulty, number> = {
+  easy: getTurnDurationForDifficulty("easy"),
+  medium: getTurnDurationForDifficulty("medium"),
+  hard: getTurnDurationForDifficulty("hard"),
+};
+
+export function useGame(options: UseGameOptions = {}): UseGameReturn {
+  const turnDurations = options.turnDurations ?? DEFAULT_TURN_DURATIONS;
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>("medium");
   const [match,              setMatch]              = useState<MatchView | null>(null);
   const [selectedPieceId,    setSelectedPieceId]    = useState<string | null>(null);
@@ -85,6 +95,21 @@ export function useGame(): UseGameReturn {
   const timeoutInFlightRef = useRef(false);
 
   useEffect(() => { matchRef.current = match; }, [match]);
+
+  useEffect(() => {
+    const current = matchRef.current;
+    if (!current) return;
+
+    const configuredDuration = turnDurations[current.difficulty];
+    if (!configuredDuration || current.turnDurationSeconds === configuredDuration) return;
+
+    try {
+      const next = updateTurnDurationEngine(current.matchId, configuredDuration);
+      setMatch(next);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Timer update failed.");
+    }
+  }, [turnDurations]);
 
   const hasPlayerFlag = useMemo(
     () => !!match?.board.some(piece => piece.owner === "player" && piece.alive && piece.role === "flag"),
@@ -219,7 +244,10 @@ export function useGame(): UseGameReturn {
       setMatch(null);
     }
     try {
-      const created = engineCreateMatch(selectedDifficulty, DEFAULT_TURN_DURATION);
+      const created = engineCreateMatch(
+        selectedDifficulty,
+        turnDurations[selectedDifficulty] ?? getTurnDurationForDifficulty(selectedDifficulty),
+      );
       setMatch(created);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Failed to start game.");

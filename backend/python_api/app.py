@@ -42,7 +42,11 @@ SQUAD_ROWS = 2
 UNITS_PER_SQUAD = BOARD_COLS * SQUAD_ROWS
 PLAYER_START_ROWS = [1, 2]
 AI_START_ROWS = [BOARD_ROWS, BOARD_ROWS - 1]
-DEFAULT_TURN_DURATION_SECONDS = 10
+TURN_DURATION_SECONDS_BY_DIFFICULTY = {
+    "easy": 30,
+    "medium": 15,
+    "hard": 10,
+}
 DUEL_TURN_BUFFER_SECONDS = 2
 
 WEAPONS: list[Weapon] = ["rock", "paper", "scissors"]
@@ -175,6 +179,10 @@ def selected_player_flag(match_state: dict[str, Any]) -> dict[str, Any] | None:
 
 def reveal_time_expired(match_state: dict[str, Any]) -> bool:
     return match_state["phase"] == "reveal" and time.time() >= match_state["reveal_ends_at"]
+
+
+def turn_duration_for_difficulty(difficulty: str) -> int:
+    return TURN_DURATION_SECONDS_BY_DIFFICULTY.get(difficulty, TURN_DURATION_SECONDS_BY_DIFFICULTY["medium"])
 
 
 def resolve_reveal_timeout(match_state: dict[str, Any]) -> bool:
@@ -585,7 +593,8 @@ def generate_squad_endpoint(_payload: SquadGenerateRequest) -> dict[str, Any]:
 
 @app.post("/api/match/create")
 def create_match(payload: MatchCreateRequest) -> dict[str, Any]:
-    match_state = create_match_state(payload.difficulty, payload.turn_duration_seconds)
+    turn_duration_seconds = payload.turn_duration_seconds or turn_duration_for_difficulty(payload.difficulty)
+    match_state = create_match_state(payload.difficulty, turn_duration_seconds)
     MATCHES[match_state["id"]] = match_state
     return build_player_view(match_state)
 
