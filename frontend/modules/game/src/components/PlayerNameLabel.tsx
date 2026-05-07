@@ -18,10 +18,10 @@ export function PlayerNameLabel({ name, team }: PlayerNameLabelProps) {
         textAlign: "center",
         fontFamily: "var(--font-body)",
         fontWeight: "bold",
-        fontSize: "clamp(1.35rem, 1.9vw, 1.7rem)",
+        fontSize: "clamp(0.9rem, 1.18vw, 1.12rem)",
         color,
         letterSpacing: "0.05em",
-        padding: "8px 0",
+        padding: "2px 0",
         textShadow: "1px 1px 3px rgba(0,0,0,0.6)",
       }}
     >

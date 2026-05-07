@@ -14,7 +14,7 @@ class SquadGenerateRequest(BaseModel):
 
 class MatchCreateRequest(BaseModel):
     difficulty: Difficulty = "medium"
-    turn_duration_seconds: int = Field(default=10, alias="turnDurationSeconds", ge=5, le=120)
+    turn_duration_seconds: int | None = Field(default=None, alias="turnDurationSeconds", ge=5, le=120)
 
 
 class MatchSettingsUpdateRequest(BaseModel):

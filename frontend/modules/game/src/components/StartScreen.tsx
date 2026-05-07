@@ -1,13 +1,15 @@
-import { useRef, type RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Difficulty } from "@shared/types";
 import { FallingLeavesBackground } from "./FallingLeavesBackground";
 import { VideoBackground } from "./VideoBackground";
+import { audioManager } from "../utils/audioManager";
 
 const GAME_BACKGROUND_OVERLAY = "linear-gradient(rgba(12, 16, 10, 0.56), rgba(12, 16, 10, 0.86))";
 
 const LOGO_IMAGE = "/game_logo_squad_rps.png";
 const START_BUTTON_IMAGE = "/ui_start_button.png";
 const HOW_TO_PLAY_BUTTON_IMAGE = "/ui_how_to_play_button.png";
+const HOW_TO_PLAY_VIDEO = "/viduo_Squad_RPS.mp4";
 const SETTINGS_BUTTON_IMAGE = "/ui_settings_button.png";
 const LEADERBOARD_BUTTON_IMAGE = "/ui_leaderboard_button.png";
 const DIFFICULTY_TITLE_IMAGE = "/ui_title_choose_difficulty.png";
@@ -38,6 +40,7 @@ interface StartScreenProps {
   selected: Difficulty;
   onSelect: (d: Difficulty) => void;
   onStart: () => void;
+  onOpenSettings: () => void;
   loading: boolean;
 }
 
@@ -52,25 +55,65 @@ function showFallbackText(target: EventTarget | null, selector: string) {
   }
 }
 
-function scrollToSection(ref: RefObject<HTMLElement | null>) {
-  ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-
-export function StartScreen({ difficulties, selected, onSelect, onStart, loading }: StartScreenProps) {
-  const rulesRef = useRef<HTMLElement | null>(null);
-  const difficultyRef = useRef<HTMLElement | null>(null);
+export function StartScreen({ difficulties, selected, onSelect, onStart, onOpenSettings, loading }: StartScreenProps) {
+  const layoutRef = useRef<HTMLDivElement | null>(null);
+  const [menuScale, setMenuScale] = useState(1);
+  const [howToPlayOpen, setHowToPlayOpen] = useState(false);
 
   const orderedDifficulties = ORDERED_DIFFICULTIES
     .map((id) => difficulties.find((difficulty) => difficulty.id === id))
     .filter((difficulty): difficulty is StartScreenProps["difficulties"][number] => Boolean(difficulty));
 
+  useEffect(() => {
+    const measureLayout = () => {
+      const layout = layoutRef.current;
+      if (!layout) return;
+
+      const availableHeight = Math.max(680, window.innerHeight - 10);
+      const naturalHeight = Math.max(layout.scrollHeight, 1);
+      const nextScale = Math.min(1, availableHeight / naturalHeight);
+
+      setMenuScale((current) => (Math.abs(current - nextScale) < 0.01 ? current : nextScale));
+    };
+
+    const frameId = window.requestAnimationFrame(measureLayout);
+    window.addEventListener("resize", measureLayout);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", measureLayout);
+    };
+  }, [selected, loading, orderedDifficulties.length]);
+
+  useEffect(() => {
+    if (!howToPlayOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    audioManager.setTemporaryMusicMuted(true);
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setHowToPlayOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      audioManager.setTemporaryMusicMuted(false);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [howToPlayOpen]);
+
   return (
     <div
       style={{
-        minHeight: "100vh",
+        height: "100vh",
         position: "relative",
         backgroundColor: "var(--color-board-bg)",
-        overflowX: "hidden",
+        overflow: "hidden",
       }}
     >
       <VideoBackground overlay={GAME_BACKGROUND_OVERLAY} fit="contain" />
@@ -86,17 +129,25 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
       />
 
       <div
+        ref={layoutRef}
         style={{
           position: "relative",
           zIndex: 1,
-          minHeight: "100vh",
-          width: "min(1320px, 100%)",
+          minHeight: "100%",
+          width: "min(1320px, calc(100% - 18px))",
           margin: "0 auto",
-          padding: "clamp(12px, 1.5vw, 18px) clamp(18px, 2.4vw, 32px) clamp(10px, 1.1vw, 14px)",
+          padding: "clamp(2px, 0.22vh, 5px) clamp(14px, 1.8vw, 24px) clamp(2px, 0.22vh, 5px)",
           display: "flex",
           flexDirection: "column",
           justifyContent: "flex-start",
-          gap: "clamp(8px, 1vw, 12px)",
+          gap: "clamp(0px, 0.12vh, 3px)",
+          transform: `translateY(-64px) scale(${menuScale})`,
+          transformOrigin: "top center",
+          willChange: "transform",
+          filter: howToPlayOpen ? "blur(14px)" : "none",
+          transformStyle: "preserve-3d",
+          transition: "filter 180ms ease",
+          pointerEvents: howToPlayOpen ? "none" : "auto",
         }}
       >
         <div
@@ -104,7 +155,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: "clamp(4px, 0.55vw, 7px)",
+            gap: "0px",
           }}
         >
           <img
@@ -112,9 +163,10 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
             alt="Squad RPS"
             style={{
               display: "block",
-              width: "clamp(360px, 40vw, 620px)",
+              width: "clamp(280px, 31vw, 470px)",
               objectFit: "contain",
               filter: "drop-shadow(0 18px 38px rgba(0,0,0,0.35))",
+              transform: "translateY(72px)",
             }}
             onError={(e) => {
               const image = e.target as HTMLImageElement;
@@ -135,7 +187,8 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
               color: "#F3F6FF",
               textShadow: "0 8px 20px rgba(0,0,0,0.35)",
               opacity: 0,
-              transition: "opacity 0.18s ease",
+              transform: "translateY(72px)",
+              transition: "opacity 0.18s ease, transform 0.18s ease",
             }}
           >
             SQUAD RPS
@@ -144,37 +197,40 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
           <div
             style={{
               fontFamily: "var(--font-ui)",
-              fontSize: "clamp(0.92rem, 1.08vw, 1.04rem)",
+              fontSize: "clamp(0.78rem, 0.88vw, 0.92rem)",
               letterSpacing: "0.16em",
               textTransform: "uppercase",
               color: "rgba(255,255,255,0.84)",
               textShadow: "0 2px 8px rgba(0,0,0,0.34)",
               textAlign: "center",
+              marginTop: "-10px",
+              marginBottom: "-8px",
             }}
           >
             Rock | Paper | Scissors | Flag | Decoy
           </div>
 
           <section
-            ref={rulesRef}
             style={{
-              width: "min(860px, 100%)",
-              padding: "14px 18px",
-              borderRadius: "18px",
+              width: "min(820px, 100%)",
+              padding: "6px 10px",
+              borderRadius: "16px",
               background: "linear-gradient(180deg, rgba(12,16,12,0.56), rgba(8,10,8,0.42))",
               border: "1px solid rgba(255,255,255,0.08)",
               backdropFilter: "blur(8px)",
               boxShadow: "0 18px 40px rgba(0,0,0,0.24)",
               display: "flex",
               flexDirection: "column",
-              gap: "6px",
+              gap: "2px",
               textAlign: "center",
+              marginTop: "-4px",
+              marginBottom: "-14px",
             }}
           >
             <div
               style={{
                 fontFamily: "var(--font-heading)",
-                fontSize: "clamp(1.14rem, 1.4vw, 1.32rem)",
+                fontSize: "clamp(0.96rem, 1.08vw, 1.14rem)",
                 color: "#F4D377",
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
@@ -187,13 +243,13 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
               <div
                 key={rule}
                 style={{
-                  padding: "7px 13px",
-                  borderRadius: "12px",
+                  padding: "3px 8px",
+                  borderRadius: "10px",
                   background: "rgba(255,255,255,0.04)",
                   border: "1px solid rgba(255,255,255,0.06)",
                   fontFamily: "var(--font-ui)",
-                  fontSize: "clamp(0.92rem, 1.06vw, 1.02rem)",
-                  lineHeight: "1.38",
+                  fontSize: "clamp(0.78rem, 0.92vw, 0.9rem)",
+                  lineHeight: "1.28",
                   color: "var(--color-text-muted)",
                 }}
               >
@@ -203,13 +259,13 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
           </section>
 
           <section
-            ref={difficultyRef}
             style={{
               width: "100%",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
               gap: "0px",
+              marginTop: "-14px",
             }}
           >
             <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center" }}>
@@ -218,11 +274,11 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                 alt="Choose difficulty"
                 style={{
                   display: "block",
-                  width: "clamp(300px, 31vw, 420px)",
+                  width: "clamp(240px, 25vw, 340px)",
                   objectFit: "contain",
                   filter: "drop-shadow(0 10px 22px rgba(0,0,0,0.28))",
-                  marginTop: "-18px",
-                  marginBottom: "-34px",
+                  marginTop: "-26px",
+                  marginBottom: "-42px",
                 }}
                 onError={(e) => {
                   showFallbackText(e.target, "[data-difficulty-title-fallback]");
@@ -253,12 +309,13 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
             <div
               style={{
                 width: "100%",
-                maxWidth: "1020px",
+                maxWidth: "930px",
                 display: "grid",
                 gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                 gap: "0px",
                 alignItems: "start",
                 justifyItems: "center",
+                marginTop: "-12px",
               }}
             >
               {orderedDifficulties.map((difficulty) => {
@@ -275,7 +332,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                     style={{
                       position: "relative",
                       width: "100%",
-                      maxWidth: "380px",
+                      maxWidth: "320px",
                       justifySelf: "center",
                       padding: 0,
                       border: "none",
@@ -302,10 +359,10 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                         display: "block",
                         width: "100%",
                         objectFit: "contain",
-                        marginTop: "-54px",
-                        marginBottom: "-18px",
-                        marginLeft: "-18px",
-                        marginRight: "-18px",
+                        marginTop: "-58px",
+                        marginBottom: "-24px",
+                        marginLeft: "-12px",
+                        marginRight: "-12px",
                         filter: isSelected ? `drop-shadow(0 14px 26px ${glow}) brightness(1.06)` : "drop-shadow(0 10px 18px rgba(0,0,0,0.2))",
                         transition: "filter 0.16s ease",
                       }}
@@ -353,11 +410,11 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
             <div
               style={{
                 width: "100%",
-                maxWidth: "1020px",
+                maxWidth: "930px",
                 display: "grid",
                 gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                 alignItems: "start",
-                marginTop: "-4px",
+                marginTop: "-16px",
               }}
             >
               <button
@@ -392,10 +449,10 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                   aria-hidden="true"
                   style={{
                     display: "block",
-                    width: "clamp(290px, 25vw, 370px)",
+                    width: "clamp(235px, 19vw, 300px)",
                     objectFit: "contain",
-                    marginTop: "-20px",
-                    marginBottom: "-38px",
+                    marginTop: "-30px",
+                    marginBottom: "-34px",
                     filter: loading ? "grayscale(0.15) brightness(0.92)" : "drop-shadow(0 0 16px rgba(205, 255, 92, 0.24))",
                   }}
                   onError={(e) => {
@@ -434,16 +491,16 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-end",
-            gap: "8px",
+            gap: "6px",
             flexWrap: "wrap",
-            marginTop: "auto",
-            paddingTop: "2px",
+            marginTop: "-18px",
+            paddingTop: "0",
           }}
         >
           <button
             type="button"
             aria-label="How to play"
-            onClick={() => scrollToSection(rulesRef)}
+            onClick={() => setHowToPlayOpen(true)}
             style={{
               padding: 0,
               background: "transparent",
@@ -465,7 +522,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
               alt="How to play"
               style={{
                 display: "block",
-                width: "clamp(170px, 15vw, 220px)",
+                width: "clamp(136px, 11.4vw, 182px)",
                 objectFit: "contain",
               }}
             />
@@ -474,7 +531,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
           <div
             style={{
               display: "flex",
-              gap: "8px",
+              gap: "6px",
               flexWrap: "wrap",
               justifyContent: "flex-end",
               alignItems: "center",
@@ -483,7 +540,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
             <button
               type="button"
               aria-label="Settings"
-              onClick={() => scrollToSection(difficultyRef)}
+              onClick={onOpenSettings}
               style={{
                 padding: 0,
                 background: "transparent",
@@ -505,7 +562,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                 alt="Settings"
                 style={{
                   display: "block",
-                  width: "clamp(170px, 15vw, 220px)",
+                  width: "clamp(136px, 11.4vw, 182px)",
                   objectFit: "contain",
                 }}
               />
@@ -536,7 +593,7 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
                 alt="Leaderboard"
                 style={{
                   display: "block",
-                  width: "clamp(175px, 15.5vw, 225px)",
+                  width: "clamp(140px, 11.8vw, 186px)",
                   objectFit: "contain",
                 }}
               />
@@ -544,6 +601,75 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, loading
           </div>
         </footer>
       </div>
+
+      {howToPlayOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="How to play video"
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 5,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "14px",
+            background: "rgba(3, 5, 4, 0.56)",
+            backdropFilter: "blur(12px)",
+          }}
+        >
+          <div
+            style={{
+              position: "relative",
+              width: "min(980px, calc(100vw - 28px))",
+              maxHeight: "calc(100vh - 28px)",
+              borderRadius: "22px",
+              overflow: "hidden",
+              background: "rgba(5, 8, 6, 0.92)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxShadow: "0 30px 80px rgba(0,0,0,0.48)",
+            }}
+          >
+            <button
+              type="button"
+              aria-label="Close how to play video"
+              onClick={() => setHowToPlayOpen(false)}
+              style={{
+                position: "absolute",
+                top: "12px",
+                right: "12px",
+                zIndex: 1,
+                width: "38px",
+                height: "38px",
+                borderRadius: "12px",
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "rgba(0,0,0,0.36)",
+                color: "#F7F9F3",
+                fontSize: "1.2rem",
+                lineHeight: 1,
+                cursor: "pointer",
+              }}
+            >
+              ×
+            </button>
+
+            <video
+              src={HOW_TO_PLAY_VIDEO}
+              controls
+              autoPlay
+              playsInline
+              preload="metadata"
+              style={{
+                display: "block",
+                width: "100%",
+                maxHeight: "calc(100vh - 28px)",
+                background: "#000000",
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

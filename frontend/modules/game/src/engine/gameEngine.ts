@@ -456,6 +456,17 @@ export function createMatch(difficulty: Difficulty, turnDurationSeconds: number)
   return buildView(state);
 }
 
+export function updateTurnDurationEngine(matchId: string, turnDurationSeconds: number): MatchView {
+  const state = getState(matchId);
+  state.turnDurationSeconds = Math.min(120, Math.max(5, Math.round(turnDurationSeconds)));
+
+  if (timedTurnOwner(state) && state.turnEndsAt !== null) {
+    setTurnDeadline(state);
+  }
+
+  return buildView(state);
+}
+
 export function completeReveal(matchId: string): MatchView {
   const state = getState(matchId);
   if (state.phase !== "reveal") return buildView(state);

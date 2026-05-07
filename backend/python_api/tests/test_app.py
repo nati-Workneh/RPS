@@ -39,9 +39,22 @@ def test_match_create_uses_canonical_board_size():
     assert len(payload["board"]) == 28
     assert len(player_pieces) == 14
     assert len(ai_pieces) == 14
+    assert payload["turnDurationSeconds"] == 30
     assert sorted({piece["col"] for piece in player_pieces}) == [1, 2, 3, 4, 5, 6, 7]
     assert sorted({piece["row"] for piece in player_pieces}) == [1, 2]
     assert sorted({piece["row"] for piece in ai_pieces}) == [5, 6]
+
+
+def test_match_create_uses_turn_duration_by_difficulty():
+    MATCHES.clear()
+
+    easy = client.post("/api/match/create", json={"difficulty": "easy"}).json()
+    medium = client.post("/api/match/create", json={"difficulty": "medium"}).json()
+    hard = client.post("/api/match/create", json={"difficulty": "hard"}).json()
+
+    assert easy["turnDurationSeconds"] == 30
+    assert medium["turnDurationSeconds"] == 15
+    assert hard["turnDurationSeconds"] == 10
 
 
 def test_reveal_complete_requires_player_flag_choice():
