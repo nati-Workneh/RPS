@@ -3,6 +3,12 @@ import { useGame } from "../hooks/useGame";
 import { useAudio } from "../hooks/useAudio";
 import { getTurnDurationForDifficulty } from "@shared/constants";
 import { audioManager } from "../utils/audioManager";
+import {
+  createFriendRoom,
+  fetchCurrentUser,
+  joinFriendRoom,
+  type AuthSession,
+} from "../api/friendApi";
 
 import { GameBoard } from "./GameBoard";
 import { PlayerNameLabel } from "./PlayerNameLabel";
@@ -13,9 +19,12 @@ import { StartScreen } from "./StartScreen";
 import { FallingLeavesBackground } from "./FallingLeavesBackground";
 import { VideoBackground } from "./VideoBackground";
 import { SettingsModal, type GameSettingsState } from "./SettingsModal";
+import { GoogleAuthModal } from "./GoogleAuthModal";
+import { FriendGameScreen } from "./FriendGameScreen";
 
 const GAME_BACKGROUND_OVERLAY = "linear-gradient(rgba(10, 14, 10, 0.64), rgba(10, 14, 10, 0.84))";
 const SETTINGS_STORAGE_KEY = "squad-rps-settings";
+const AUTH_STORAGE_KEY = "squad-rps-auth";
 const FLAG_CURSOR_IMAGE = "/flag_red_nobg.png";
 const DECOY_CURSOR_IMAGE = "/game_piece_totem_nobg.png";
 
@@ -77,6 +86,34 @@ function persistSettings(settings: GameSettingsState) {
   window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
 }
 
+function loadStoredAuth(): AuthSession | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AuthSession | null;
+    if (!parsed?.token || !parsed.user?.id) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function persistAuth(session: AuthSession | null) {
+  if (typeof window === "undefined") return;
+  if (!session) {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+}
+
+type FriendIntent =
+  | { type: "invite" }
+  | { type: "join"; roomId: string }
+  | null;
+
 function getBlurStyle(blurred: boolean) {
   return {
     filter: blurred ? "blur(16px) saturate(0.82)" : "none",
@@ -92,6 +129,16 @@ export function GameScreen() {
   const [settings, setSettings] = useState<GameSettingsState>(() => loadStoredSettings());
   const [gameScale, setGameScale] = useState(1);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0, visible: false });
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => loadStoredAuth());
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authPendingLabel, setAuthPendingLabel] = useState<string | null>(null);
+  const [friendIntent, setFriendIntent] = useState<FriendIntent>(() => {
+    if (typeof window === "undefined") return null;
+    const inviteRoomId = new URL(window.location.href).searchParams.get("invite");
+    return inviteRoomId ? { type: "join", roomId: inviteRoomId } : null;
+  });
+  const [friendRoomId, setFriendRoomId] = useState<string | null>(null);
+  const [friendLoading, setFriendLoading] = useState(false);
   const layoutRef = useRef<HTMLDivElement | null>(null);
 
   const {
@@ -125,6 +172,97 @@ export function GameScreen() {
     skipReveal,
     uiPhase,
   } = useGame({ turnDurations: settings.turnDurations });
+
+  useEffect(() => {
+    persistAuth(authSession);
+  }, [authSession]);
+
+  useEffect(() => {
+    if (!authSession) return undefined;
+
+    let cancelled = false;
+    void fetchCurrentUser(authSession.token)
+      .then((user) => {
+        if (!cancelled) {
+          setAuthSession((current) => (current ? { ...current, user } : current));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAuthSession(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!friendIntent) return;
+    if (!authSession) {
+      setAuthPendingLabel(
+        friendIntent.type === "join"
+          ? "Sign in with Google to join your friend's Squad RPS room."
+          : "Sign in with Google to create your friend room and send the invite.",
+      );
+      setAuthModalOpen(true);
+      return;
+    }
+    if (friendLoading) return;
+
+    let cancelled = false;
+
+    const executeFriendIntent = async () => {
+      setFriendLoading(true);
+      setAuthPendingLabel(friendIntent.type === "join" ? "Joining your friend's room..." : "Creating your friend room...");
+      try {
+        if (friendIntent.type === "join") {
+          const room = await joinFriendRoom(authSession.token, friendIntent.roomId);
+          if (cancelled) return;
+          setFriendRoomId(room.roomId);
+          setAuthModalOpen(false);
+        } else {
+          const turnDuration = settings.turnDurations[selectedDifficulty];
+          const room = await createFriendRoom(authSession.token, selectedDifficulty, turnDuration);
+          if (cancelled) return;
+
+          const inviteUrl = new URL(window.location.href);
+          inviteUrl.search = `invite=${room.roomId}`;
+          inviteUrl.hash = "";
+          window.history.replaceState({}, "", inviteUrl.toString());
+
+          setFriendRoomId(room.roomId);
+          setAuthModalOpen(false);
+
+          const shareText = `Join me in Squad RPS! ${inviteUrl.toString()}`;
+          const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+          const popup = window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+          if (!popup) {
+            window.location.href = whatsappUrl;
+          }
+        }
+
+        setFriendIntent(null);
+        setAuthPendingLabel(null);
+      } catch (cause) {
+        if (!cancelled) {
+          setAuthPendingLabel(cause instanceof Error ? cause.message : "Could not open the friend room.");
+          setAuthModalOpen(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setFriendLoading(false);
+        }
+      }
+    };
+
+    void executeFriendIntent();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession, friendIntent, friendLoading, selectedDifficulty, settings.turnDurations]);
 
   useEffect(() => {
     persistSettings(settings);
@@ -227,6 +365,33 @@ export function GameScreen() {
 
   const openSettings = () => setSettingsOpen(true);
   const closeSettings = () => setSettingsOpen(false);
+  const openFriendFlow = () => {
+    setFriendIntent({ type: "invite" });
+    if (!authSession) {
+      setAuthPendingLabel("Sign in with Google to create your friend room and send the invite.");
+      setAuthModalOpen(true);
+    }
+  };
+  const openGoogleSignIn = () => {
+    setFriendIntent(null);
+    setAuthPendingLabel(
+      authSession
+        ? "Your Google account is already connected. You can sign in again if you want to switch accounts."
+        : "Sign in with Google to unlock friend invites and multiplayer rooms.",
+    );
+    setAuthModalOpen(true);
+  };
+  const leaveFriendRoom = () => {
+    setFriendRoomId(null);
+    setFriendIntent(null);
+    setAuthPendingLabel(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("invite");
+      url.hash = "";
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
 
   const updateTurnDuration = (difficulty: "easy" | "medium" | "hard", value: number) => {
     setSettings((current) => ({
@@ -254,21 +419,54 @@ export function GameScreen() {
       onResetDefaults={resetSettings}
     />
   );
+  const authModal = (
+    <GoogleAuthModal
+      open={authModalOpen}
+      pendingLabel={authPendingLabel}
+      onClose={() => setAuthModalOpen(false)}
+      onAuthenticated={(session) => {
+        setAuthSession(session);
+        setAuthModalOpen(false);
+      }}
+    />
+  );
+
+  if (friendRoomId && authSession) {
+    return (
+      <>
+        <div style={getBlurStyle(settingsOpen || authModalOpen)}>
+          <FriendGameScreen
+            session={authSession}
+            roomId={friendRoomId}
+            onLeaveRoom={leaveFriendRoom}
+            onOpenSettings={openSettings}
+          />
+        </div>
+        {settingsModal}
+        {authModal}
+      </>
+    );
+  }
 
   if (phase === "setup" || !match) {
     return (
       <>
-        <div style={getBlurStyle(settingsOpen)}>
+        <div style={getBlurStyle(settingsOpen || authModalOpen)}>
           <StartScreen
             difficulties={difficulties}
             selected={selectedDifficulty}
             onSelect={setSelectedDifficulty}
             onStart={startMatch}
+            onPlayWithFriends={openFriendFlow}
+            onOpenGoogleSignIn={openGoogleSignIn}
             onOpenSettings={openSettings}
             loading={loading}
+            friendLoading={friendLoading}
+            authenticatedUser={authSession?.user ?? null}
           />
         </div>
         {settingsModal}
+        {authModal}
       </>
     );
   }

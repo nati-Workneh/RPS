@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Difficulty } from "@shared/types";
+import type { AuthUser } from "../api/friendApi";
 import { FallingLeavesBackground } from "./FallingLeavesBackground";
 import { VideoBackground } from "./VideoBackground";
 import { audioManager } from "../utils/audioManager";
@@ -40,8 +41,12 @@ interface StartScreenProps {
   selected: Difficulty;
   onSelect: (d: Difficulty) => void;
   onStart: () => void;
+  onPlayWithFriends: () => void;
+  onOpenGoogleSignIn: () => void;
   onOpenSettings: () => void;
   loading: boolean;
+  friendLoading?: boolean;
+  authenticatedUser?: AuthUser | null;
 }
 
 function showFallbackText(target: EventTarget | null, selector: string) {
@@ -55,7 +60,18 @@ function showFallbackText(target: EventTarget | null, selector: string) {
   }
 }
 
-export function StartScreen({ difficulties, selected, onSelect, onStart, onOpenSettings, loading }: StartScreenProps) {
+export function StartScreen({
+  difficulties,
+  selected,
+  onSelect,
+  onStart,
+  onPlayWithFriends,
+  onOpenGoogleSignIn,
+  onOpenSettings,
+  loading,
+  friendLoading = false,
+  authenticatedUser = null,
+}: StartScreenProps) {
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const [menuScale, setMenuScale] = useState(1);
   const [howToPlayOpen, setHowToPlayOpen] = useState(false);
@@ -107,22 +123,6 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, onOpenS
     };
   }, [howToPlayOpen]);
 
-  const handleInviteFriend = () => {
-    if (typeof window === "undefined") return;
-
-    const inviteUrl = new URL(window.location.href);
-    inviteUrl.search = "";
-    inviteUrl.hash = "";
-
-    const shareText = `Join me in Squad RPS! ${inviteUrl.toString()}`;
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-    const popup = window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-
-    if (!popup) {
-      window.location.href = whatsappUrl;
-    }
-  };
-
   return (
     <div
       style={{
@@ -143,6 +143,94 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, onOpenS
           pointerEvents: "none",
         }}
       />
+
+      <button
+        type="button"
+        onClick={onOpenGoogleSignIn}
+        aria-label={authenticatedUser ? "Google account connected" : "Sign in with Google"}
+        style={{
+          position: "absolute",
+          top: "12px",
+          right: "16px",
+          zIndex: 2,
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "10px 14px",
+          borderRadius: "18px",
+          background: "rgba(8, 12, 9, 0.54)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          backdropFilter: "blur(8px)",
+          boxShadow: "0 16px 34px rgba(0,0,0,0.22)",
+          cursor: "pointer",
+          textAlign: "left",
+          transition: "transform 140ms ease, box-shadow 140ms ease, background 140ms ease",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = "translateY(-2px)";
+          e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.28)";
+          e.currentTarget.style.background = "rgba(12, 18, 13, 0.72)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = "translateY(0)";
+          e.currentTarget.style.boxShadow = "0 16px 34px rgba(0,0,0,0.22)";
+          e.currentTarget.style.background = "rgba(8, 12, 9, 0.54)";
+        }}
+      >
+        {authenticatedUser?.picture ? (
+          <img
+            src={authenticatedUser.picture}
+            alt={authenticatedUser.displayName ?? "Google player"}
+            style={{
+              width: "34px",
+              height: "34px",
+              borderRadius: "50%",
+              objectFit: "cover",
+              border: "1px solid rgba(255,255,255,0.2)",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: "34px",
+              height: "34px",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(255,255,255,0.08)",
+              color: "#F4D377",
+              fontFamily: "var(--font-heading)",
+              fontSize: "0.9rem",
+            }}
+          >
+            G
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+          <span
+            style={{
+              fontFamily: "var(--font-ui)",
+              fontSize: "0.78rem",
+              color: "#F7F9F3",
+              lineHeight: 1.2,
+            }}
+          >
+            {authenticatedUser?.displayName ?? authenticatedUser?.email ?? "Google sign-in required"}
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--font-ui)",
+              fontSize: "0.66rem",
+              color: "rgba(247,249,243,0.62)",
+              lineHeight: 1.2,
+            }}
+          >
+            {authenticatedUser ? "Signed in with Google" : "Click here to sign in with Google"}
+          </span>
+        </div>
+      </button>
 
       <div
         ref={layoutRef}
@@ -555,8 +643,9 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, onOpenS
           <div style={{ display: "contents" }}>
             <button
               type="button"
-              onClick={handleInviteFriend}
+              onClick={onPlayWithFriends}
               aria-label="Invite a friend on WhatsApp"
+              disabled={friendLoading}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -575,15 +664,18 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, onOpenS
                 letterSpacing: "0.02em",
                 textAlign: "center",
                 marginBottom: "26px",
-                cursor: "pointer",
+                cursor: friendLoading ? "wait" : "pointer",
+                opacity: friendLoading ? 0.72 : 1,
                 transition: "transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease",
               }}
               onMouseEnter={(e) => {
+                if (friendLoading) return;
                 e.currentTarget.style.transform = "translateY(-3px)";
                 e.currentTarget.style.boxShadow = "0 14px 24px rgba(0,0,0,0.28), 0 0 16px rgba(80, 214, 130, 0.26)";
                 e.currentTarget.style.filter = "brightness(1.04)";
               }}
               onMouseLeave={(e) => {
+                if (friendLoading) return;
                 e.currentTarget.style.transform = "translateY(0)";
                 e.currentTarget.style.boxShadow = "0 10px 20px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.14)";
                 e.currentTarget.style.filter = "none";
@@ -599,7 +691,9 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, onOpenS
               >
                 הזמנת חבר למשחק
               </span>
-              <span style={{ display: "block", whiteSpace: "nowrap" }}>Play With Friends</span>
+              <span style={{ display: "block", whiteSpace: "nowrap" }}>
+                {friendLoading ? "Opening Friend Room..." : "Play With Friends"}
+              </span>
             </button>
           </div>
           </div>
