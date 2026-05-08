@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: rps-friend-api
+    runtime: docker
+    dockerfilePath: backend/python_api/Dockerfile
+    dockerContext: backend/python_api
+    envVars:
+      - key: GOOGLE_CLIENT_ID
+        sync: false

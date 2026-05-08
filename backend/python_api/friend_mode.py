@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import id_token
 
-from .config import GOOGLE_CLIENT_ID
-from .schemas import (
+from config import GOOGLE_CLIENT_ID
+from schemas import (
     Difficulty,
     FriendMoveRequest,
     FriendPieceRequest,
