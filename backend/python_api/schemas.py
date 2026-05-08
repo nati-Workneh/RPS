@@ -33,6 +33,10 @@ class PlayerFlagRequest(BaseModel):
     piece_id: str = Field(alias="pieceId")
 
 
+class PlayerDecoyRequest(BaseModel):
+    piece_id: str = Field(alias="pieceId")
+
+
 class PlayerMoveRequest(BaseModel):
     piece_id: str = Field(alias="pieceId")
     target_row: int = Field(alias="targetRow")

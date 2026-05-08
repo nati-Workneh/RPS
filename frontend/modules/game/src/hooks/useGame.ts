@@ -9,6 +9,8 @@ import {
   completeReveal as engineCompleteReveal,
   shufflePlayerPiecesEngine,
   choosePlayerFlagEngine,
+  choosePlayerDecoyEngine,
+  swapPlayerRevealPieceEngine,
   playerMoveEngine,
   tieRepickEngine,
   aiMoveEngine,
@@ -25,6 +27,7 @@ export interface UseGameReturn {
   uiPhase:           UiPhase;
   selectedPieceId:   string | null;
   movingPieceId:     string | null;
+  draggingPieceId:   string | null;
   selectablePieceIds: Set<string>;
   validMoveSet:      Set<string>;
   error:             string | null;
@@ -38,6 +41,9 @@ export interface UseGameReturn {
   setSelectedDifficulty: (d: Difficulty) => void;
   onPieceClick:      (piece: Piece) => void;
   onCellClick:       (row: number, col: number) => void;
+  onRevealDragStart: (piece: Piece) => void;
+  onRevealDragEnd:   () => void;
+  onRevealDrop:      (row: number, col: number) => void;
   shufflePlayerPieces: () => Promise<void>;
   startMatch:        () => Promise<void>;
   resetMatch:        () => Promise<void>;
@@ -57,6 +63,7 @@ const DIFFICULTIES: Array<{ id: Difficulty; label: string; detail: string }> = [
 ];
 
 function computeValidMoves(piece: Piece, board: Piece[]): Array<{ row: number; col: number }> {
+  if (piece.role === "decoy") return [];
   const occupied = new Map(board.filter(p => p.alive).map(p => [`${p.row}-${p.col}`, p]));
   const dirs = [{ dr: 1, dc: 0 }, { dr: -1, dc: 0 }, { dr: 0, dc: 1 }, { dr: 0, dc: -1 }];
   return dirs
@@ -84,6 +91,7 @@ export function useGame(options: UseGameOptions = {}): UseGameReturn {
   const [match,              setMatch]              = useState<MatchView | null>(null);
   const [selectedPieceId,    setSelectedPieceId]    = useState<string | null>(null);
   const [movingPieceId,      setMovingPieceId]      = useState<string | null>(null);
+  const [draggingPieceId,    setDraggingPieceId]    = useState<string | null>(null);
   const [loading,            setLoading]            = useState(false);
   const [error,              setError]              = useState<string | null>(null);
   const [revealSecondsLeft,  setRevealSecondsLeft]  = useState(0);
@@ -113,6 +121,11 @@ export function useGame(options: UseGameOptions = {}): UseGameReturn {
 
   const hasPlayerFlag = useMemo(
     () => !!match?.board.some(piece => piece.owner === "player" && piece.alive && piece.role === "flag"),
+    [match],
+  );
+
+  const hasPlayerDecoy = useMemo(
+    () => !!match?.board.some(piece => piece.owner === "player" && piece.alive && piece.role === "decoy"),
     [match],
   );
 
@@ -236,6 +249,7 @@ export function useGame(options: UseGameOptions = {}): UseGameReturn {
     setError(null);
     setSelectedPieceId(null);
     setMovingPieceId(null);
+    setDraggingPieceId(null);
     setTurnSecondsLeft(0);
     setShowDuel(false);
     setDyingIds(new Set());
@@ -269,6 +283,7 @@ export function useGame(options: UseGameOptions = {}): UseGameReturn {
     if (!current || current.phase !== "reveal") return;
     try {
       const next = engineCompleteReveal(current.matchId);
+      setDraggingPieceId(null);
       setMatch(next);
     } catch (cause) {
       const msg = cause instanceof Error ? cause.message : "Reveal transition failed.";
@@ -277,7 +292,7 @@ export function useGame(options: UseGameOptions = {}): UseGameReturn {
   }
 
   async function skipReveal() {
-    if (!hasPlayerFlag) return;
+    if (!hasPlayerFlag || !hasPlayerDecoy) return;
     setError(null);
     await handleCompleteReveal();
   }
@@ -287,6 +302,7 @@ export function useGame(options: UseGameOptions = {}): UseGameReturn {
     if (!current || current.phase !== "reveal") return;
     setLoading(true);
     setError(null);
+    setDraggingPieceId(null);
     try {
       const next = shufflePlayerPiecesEngine(current.matchId);
       setMatch(next);
@@ -306,10 +322,43 @@ export function useGame(options: UseGameOptions = {}): UseGameReturn {
     setError(null);
     try {
       const next = choosePlayerFlagEngine(current.matchId, pieceId);
+      setDraggingPieceId(null);
       setMatch(next);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Flag selection failed.");
     } finally {
+      setLoading(false);
+    }
+  }
+
+  async function choosePlayerDecoy(pieceId: string) {
+    const current = matchRef.current;
+    if (!current || current.phase !== "reveal") return;
+    setLoading(true);
+    setError(null);
+    try {
+      const next = choosePlayerDecoyEngine(current.matchId, pieceId);
+      setDraggingPieceId(null);
+      setMatch(next);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Decoy selection failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function moveRevealPiece(pieceId: string, targetRow: number, targetCol: number) {
+    const current = matchRef.current;
+    if (!current || current.phase !== "reveal") return;
+    setLoading(true);
+    setError(null);
+    try {
+      const next = swapPlayerRevealPieceEngine(current.matchId, pieceId, targetRow, targetCol);
+      setMatch(next);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Formation update failed.");
+    } finally {
+      setDraggingPieceId(null);
       setLoading(false);
     }
   }
@@ -367,7 +416,11 @@ export function useGame(options: UseGameOptions = {}): UseGameReturn {
 
     if (match?.phase === "reveal") {
       if (piece.owner === "player" && piece.alive) {
-        void choosePlayerFlag(piece.id);
+        if (!hasPlayerFlag) {
+          void choosePlayerFlag(piece.id);
+        } else if (!hasPlayerDecoy) {
+          void choosePlayerDecoy(piece.id);
+        }
       }
       return;
     }
@@ -392,10 +445,29 @@ export function useGame(options: UseGameOptions = {}): UseGameReturn {
     if (!occupant) void movePiece(row, col);
   }
 
+  function onRevealDragStart(piece: Piece) {
+    if (!match || match.phase !== "reveal" || loading) return;
+    if (piece.owner !== "player" || !piece.alive) return;
+    if (!hasPlayerFlag || !hasPlayerDecoy) return;
+    if (piece.role !== "flag" && piece.role !== "decoy") return;
+    setSelectedPieceId(null);
+    setDraggingPieceId(piece.id);
+  }
+
+  function onRevealDragEnd() {
+    setDraggingPieceId(null);
+  }
+
+  function onRevealDrop(row: number, col: number) {
+    if (!match || match.phase !== "reveal" || !draggingPieceId) return;
+    void moveRevealPiece(draggingPieceId, row, col);
+  }
+
   function resetToSetup() {
     setMatch(null);
     setSelectedPieceId(null);
     setMovingPieceId(null);
+    setDraggingPieceId(null);
     setError(null);
     setLoading(false);
     setTurnSecondsLeft(0);
@@ -421,6 +493,7 @@ export function useGame(options: UseGameOptions = {}): UseGameReturn {
     uiPhase,
     selectedPieceId,
     movingPieceId,
+    draggingPieceId,
     selectablePieceIds,
     validMoveSet,
     error,
@@ -434,6 +507,9 @@ export function useGame(options: UseGameOptions = {}): UseGameReturn {
     setSelectedDifficulty,
     onPieceClick,
     onCellClick,
+    onRevealDragStart,
+    onRevealDragEnd,
+    onRevealDrop,
     shufflePlayerPieces,
     startMatch,
     resetMatch,

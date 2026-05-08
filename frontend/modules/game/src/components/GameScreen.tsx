@@ -16,13 +16,17 @@ import { SettingsModal, type GameSettingsState } from "./SettingsModal";
 
 const GAME_BACKGROUND_OVERLAY = "linear-gradient(rgba(10, 14, 10, 0.64), rgba(10, 14, 10, 0.84))";
 const SETTINGS_STORAGE_KEY = "squad-rps-settings";
+const FLAG_CURSOR_IMAGE = "/flag_red_nobg.png";
+const DECOY_CURSOR_IMAGE = "/game_piece_totem_nobg.png";
 
 const REVEAL_PICK_FLAG_LABEL =
-  "Shuffle your soldiers, then click one of them to choose your flag";
-const REVEAL_FLAG_SELECTED_LABEL =
-  "Flag selected. Memorize the enemy weapons";
+  "Your cursor is the flag. Click one soldier to place it";
+const REVEAL_PICK_DECOY_LABEL =
+  "Your cursor is now the decoy totem. Click a different soldier to place it";
+const REVEAL_READY_LABEL =
+  "Flag and decoy locked. You can now drag either one before the match starts";
 const REVEAL_REQUIRED_LABEL =
-  "Pick a flag to start the match";
+  "Pick both your flag and decoy before the reveal ends";
 
 const DEFAULT_GAME_SETTINGS: GameSettingsState = {
   turnDurations: {
@@ -87,6 +91,7 @@ export function GameScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<GameSettingsState>(() => loadStoredSettings());
   const [gameScale, setGameScale] = useState(1);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0, visible: false });
   const layoutRef = useRef<HTMLDivElement | null>(null);
 
   const {
@@ -95,6 +100,7 @@ export function GameScreen() {
     phase,
     selectedPieceId,
     movingPieceId,
+    draggingPieceId,
     selectablePieceIds,
     validMoveSet,
     error,
@@ -108,6 +114,9 @@ export function GameScreen() {
     setSelectedDifficulty,
     onPieceClick,
     onCellClick,
+    onRevealDragStart,
+    onRevealDragEnd,
+    onRevealDrop,
     shufflePlayerPieces,
     startMatch,
     resetMatch,
@@ -162,11 +171,51 @@ export function GameScreen() {
   const hasPlayerFlag = !!match?.board.some(
     (piece) => piece.owner === "player" && piece.alive && piece.role === "flag",
   );
+  const hasPlayerDecoy = !!match?.board.some(
+    (piece) => piece.owner === "player" && piece.alive && piece.role === "decoy",
+  );
+  const revealPlacementCursorSrc =
+    phase === "reveal" && !settingsOpen
+      ? !hasPlayerFlag
+        ? FLAG_CURSOR_IMAGE
+        : !hasPlayerDecoy
+        ? DECOY_CURSOR_IMAGE
+        : null
+      : null;
 
   const displayTurnSeconds = Math.min(
     turnSecondsLeft,
     match?.turnDurationSeconds ?? settings.turnDurations[selectedDifficulty],
   );
+
+  useEffect(() => {
+    if (!revealPlacementCursorSrc) {
+      setMousePosition((current) => ({ ...current, visible: false }));
+      return undefined;
+    }
+
+    const handleMove = (event: MouseEvent) => {
+      setMousePosition({
+        x: event.clientX,
+        y: event.clientY,
+        visible: true,
+      });
+    };
+
+    window.addEventListener("mousemove", handleMove);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+    };
+  }, [revealPlacementCursorSrc]);
+
+  useEffect(() => {
+    const previousCursor = document.body.style.cursor;
+    document.body.style.cursor = revealPlacementCursorSrc ? "none" : "";
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+    };
+  }, [revealPlacementCursorSrc]);
 
   useAudio(match ? {
     phase,
@@ -293,8 +342,10 @@ export function GameScreen() {
       : uiPhase === "BATTLE"
       ? "Duel in progress!"
       : phase === "reveal"
-      ? hasPlayerFlag
-        ? `${REVEAL_FLAG_SELECTED_LABEL} - ${revealSecondsLeft}s`
+      ? hasPlayerFlag && hasPlayerDecoy
+        ? `${REVEAL_READY_LABEL} - ${revealSecondsLeft}s`
+        : hasPlayerFlag
+        ? `${REVEAL_PICK_DECOY_LABEL} - ${revealSecondsLeft}s`
         : revealSecondsLeft > 0
         ? `${REVEAL_PICK_FLAG_LABEL} - ${revealSecondsLeft}s`
         : REVEAL_REQUIRED_LABEL
@@ -353,12 +404,16 @@ export function GameScreen() {
                     boardCells={boardCells}
                     selectedPieceId={selectedPieceId}
                     movingPieceId={movingPieceId}
+                    draggingPieceId={draggingPieceId}
                     selectablePieceIds={selectablePieceIds}
                     validMoveSet={validMoveSet}
                     phase={phase}
                     dyingIds={dyingIds}
                     onPieceClick={onPieceClick}
                     onCellClick={onCellClick}
+                    onRevealDragStart={onRevealDragStart}
+                    onRevealDragEnd={onRevealDragEnd}
+                    onRevealDrop={onRevealDrop}
                   />
 
                   {phase === "reveal" && (
@@ -451,7 +506,7 @@ export function GameScreen() {
                     {statusMessage}
                   </span>
 
-                  {phase === "reveal" && hasPlayerFlag && (
+                  {phase === "reveal" && hasPlayerFlag && hasPlayerDecoy && (
                     <button
                       type="button"
                       onClick={skipReveal}
@@ -491,6 +546,36 @@ export function GameScreen() {
               </div>
             </div>
           </div>
+
+          {revealPlacementCursorSrc && mousePosition.visible && (
+            <div
+              aria-hidden="true"
+              style={{
+                position: "fixed",
+                left: mousePosition.x,
+                top: mousePosition.y,
+                width: "34px",
+                height: "34px",
+                transform: "translate(-6px, -8px)",
+                pointerEvents: "none",
+                zIndex: 9,
+                opacity: 0.96,
+                filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.42))",
+              }}
+            >
+              <img
+                src={revealPlacementCursorSrc}
+                alt=""
+                draggable={false}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
 

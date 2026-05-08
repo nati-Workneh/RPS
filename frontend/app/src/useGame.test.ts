@@ -3,6 +3,30 @@ import { renderHook, act } from "@testing-library/react";
 import { useGame } from "@game/hooks/useGame";
 import { audioManager } from "@game/utils/audioManager";
 
+async function choosePlayerSpecialPieces(result: { current: ReturnType<typeof useGame> }) {
+  const flagCandidate = result.current.match?.board.find(
+    (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 1,
+  );
+  expect(flagCandidate).toBeTruthy();
+
+  await act(async () => {
+    result.current.onPieceClick(flagCandidate!);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const decoyCandidate = result.current.match?.board.find(
+    (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 2,
+  );
+  expect(decoyCandidate).toBeTruthy();
+
+  await act(async () => {
+    result.current.onPieceClick(decoyCandidate!);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -35,16 +59,7 @@ describe("useGame smoke test", () => {
       await result.current.startMatch();
     });
 
-    const flagCandidate = result.current.match?.board.find(
-      (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 1,
-    );
-    expect(flagCandidate).toBeTruthy();
-
-    await act(async () => {
-      result.current.onPieceClick(flagCandidate!);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await choosePlayerSpecialPieces(result);
 
     await act(async () => {
       await result.current.skipReveal();
@@ -126,23 +141,14 @@ describe("useGame smoke test", () => {
       await result.current.startMatch();
     });
 
-    const flagCandidate = result.current.match?.board.find(
-      (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 1,
-    );
-    expect(flagCandidate).toBeTruthy();
-
-    await act(async () => {
-      result.current.onPieceClick(flagCandidate!);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await choosePlayerSpecialPieces(result);
 
     await act(async () => {
       await result.current.skipReveal();
     });
 
     const blockedUnit = result.current.match?.board.find(
-      (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 2 && piece.alive,
+      (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 3 && piece.alive,
     );
     expect(blockedUnit).toBeTruthy();
 
@@ -183,7 +189,7 @@ describe("useGame smoke test", () => {
     expect(Array.from(afterPositions.entries()).some(([id, position]) => beforePositions.get(id) !== position)).toBe(true);
   });
 
-  it("should let the player choose a flag during the opening reveal", async () => {
+  it("should let the player choose a flag and a decoy during the opening reveal", async () => {
     const { result } = renderHook(() => useGame());
 
     await act(async () => {
@@ -203,9 +209,163 @@ describe("useGame smoke test", () => {
     const chosenPiece = result.current.match?.board.find((piece) => piece.id === flagCandidate!.id);
     expect(chosenPiece?.role).toBe("flag");
     expect(result.current.match?.message).toContain("Flag placed");
+
+    const decoyCandidate = result.current.match?.board.find(
+      (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 4,
+    );
+    expect(decoyCandidate).toBeTruthy();
+
+    await act(async () => {
+      result.current.onPieceClick(decoyCandidate!);
+      await Promise.resolve();
+    });
+
+    const chosenDecoy = result.current.match?.board.find((piece) => piece.id === decoyCandidate!.id);
+    expect(chosenDecoy?.role).toBe("decoy");
+    expect(result.current.match?.message).toContain("Decoy placed");
   });
 
-  it("should lose the match when the reveal timer expires before placing a flag", async () => {
+  it("should let the player drag the flag and decoy carriers to new reveal positions", async () => {
+    const { result } = renderHook(() => useGame());
+
+    await act(async () => {
+      await result.current.startMatch();
+    });
+
+    const flagCandidate = result.current.match?.board.find(
+      (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 1,
+    );
+    const decoyCandidate = result.current.match?.board.find(
+      (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 2,
+    );
+    const firstSwapTarget = result.current.match?.board.find(
+      (piece) => piece.owner === "player" && piece.row === 2 && piece.col === 7,
+    );
+    const secondSwapTarget = result.current.match?.board.find(
+      (piece) => piece.owner === "player" && piece.row === 2 && piece.col === 6,
+    );
+
+    expect(flagCandidate).toBeTruthy();
+    expect(decoyCandidate).toBeTruthy();
+    expect(firstSwapTarget).toBeTruthy();
+    expect(secondSwapTarget).toBeTruthy();
+
+    await act(async () => {
+      result.current.onPieceClick(flagCandidate!);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      result.current.onPieceClick(decoyCandidate!);
+      await Promise.resolve();
+    });
+
+    const chosenFlag = result.current.match?.board.find((piece) => piece.id === flagCandidate!.id);
+    expect(chosenFlag?.role).toBe("flag");
+
+    act(() => {
+      result.current.onRevealDragStart(chosenFlag!);
+    });
+
+    expect(result.current.draggingPieceId).toBe(chosenFlag!.id);
+
+    await act(async () => {
+      result.current.onRevealDrop(2, 7);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const movedFlag = result.current.match?.board.find((piece) => piece.id === flagCandidate!.id);
+    const swappedFlagTarget = result.current.match?.board.find((piece) => piece.id === firstSwapTarget!.id);
+
+    expect(movedFlag?.row).toBe(2);
+    expect(movedFlag?.col).toBe(7);
+    expect(swappedFlagTarget?.row).toBe(1);
+    expect(swappedFlagTarget?.col).toBe(1);
+    expect(result.current.draggingPieceId).toBeNull();
+
+    const chosenDecoy = result.current.match?.board.find((piece) => piece.id === decoyCandidate!.id);
+    expect(chosenDecoy?.role).toBe("decoy");
+
+    act(() => {
+      result.current.onRevealDragStart(chosenDecoy!);
+    });
+
+    await act(async () => {
+      result.current.onRevealDrop(2, 6);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const movedDecoy = result.current.match?.board.find((piece) => piece.id === decoyCandidate!.id);
+    const swappedDecoyTarget = result.current.match?.board.find((piece) => piece.id === secondSwapTarget!.id);
+
+    expect(movedDecoy?.row).toBe(2);
+    expect(movedDecoy?.col).toBe(6);
+    expect(swappedDecoyTarget?.row).toBe(1);
+    expect(swappedDecoyTarget?.col).toBe(2);
+    expect(result.current.match?.message).toContain("Decoy Totem moved");
+  });
+
+  it("should only allow reveal dragging after both special pieces were chosen", async () => {
+    const { result } = renderHook(() => useGame());
+
+    await act(async () => {
+      await result.current.startMatch();
+    });
+
+    const initialFlagCandidate = result.current.match?.board.find(
+      (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 1,
+    );
+    expect(initialFlagCandidate).toBeTruthy();
+
+    act(() => {
+      result.current.onRevealDragStart(initialFlagCandidate!);
+    });
+
+    expect(result.current.draggingPieceId).toBeNull();
+
+    await act(async () => {
+      result.current.onPieceClick(initialFlagCandidate!);
+      await Promise.resolve();
+    });
+
+    const placedFlag = result.current.match?.board.find((piece) => piece.id === initialFlagCandidate!.id);
+    expect(placedFlag?.role).toBe("flag");
+
+    act(() => {
+      result.current.onRevealDragStart(placedFlag!);
+    });
+
+    expect(result.current.draggingPieceId).toBeNull();
+
+    const decoyCandidate = result.current.match?.board.find(
+      (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 2,
+    );
+    expect(decoyCandidate).toBeTruthy();
+
+    await act(async () => {
+      result.current.onPieceClick(decoyCandidate!);
+      await Promise.resolve();
+    });
+
+    const normalSoldier = result.current.match?.board.find(
+      (piece) =>
+        piece.owner === "player" &&
+        piece.alive &&
+        piece.role !== "flag" &&
+        piece.role !== "decoy",
+    );
+    expect(normalSoldier).toBeTruthy();
+
+    act(() => {
+      result.current.onRevealDragStart(normalSoldier!);
+    });
+
+    expect(result.current.draggingPieceId).toBeNull();
+  });
+
+  it("should lose the match when the reveal timer expires before placing the flag and decoy", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-05T18:00:00.000Z"));
 
@@ -216,7 +376,7 @@ describe("useGame smoke test", () => {
     });
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(16000);
+      await vi.advanceTimersByTimeAsync(21000);
     });
 
     expect(result.current.phase).toBe("finished");
@@ -234,16 +394,7 @@ describe("useGame smoke test", () => {
       await result.current.startMatch();
     });
 
-    const flagCandidate = result.current.match?.board.find(
-      (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 1,
-    );
-    expect(flagCandidate).toBeTruthy();
-
-    await act(async () => {
-      result.current.onPieceClick(flagCandidate!);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await choosePlayerSpecialPieces(result);
 
     await act(async () => {
       await result.current.skipReveal();
@@ -267,16 +418,7 @@ describe("useGame smoke test", () => {
       await result.current.startMatch();
     });
 
-    const flagCandidate = result.current.match?.board.find(
-      (piece) => piece.owner === "player" && piece.row === 1 && piece.col === 1,
-    );
-    expect(flagCandidate).toBeTruthy();
-
-    await act(async () => {
-      result.current.onPieceClick(flagCandidate!);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await choosePlayerSpecialPieces(result);
 
     await act(async () => {
       await result.current.skipReveal();
@@ -308,5 +450,31 @@ describe("useGame smoke test", () => {
         (piece) => piece.owner === "ai" && piece.alive && piece.row === 4,
       ),
     ).toBe(true);
+  });
+
+  it("should prevent the player decoy from being selected for movement", async () => {
+    const { result } = renderHook(() => useGame());
+
+    await act(async () => {
+      await result.current.startMatch();
+    });
+
+    await choosePlayerSpecialPieces(result);
+
+    await act(async () => {
+      await result.current.skipReveal();
+    });
+
+    const decoyPiece = result.current.match?.board.find(
+      (piece) => piece.owner === "player" && piece.role === "decoy" && piece.alive,
+    );
+    expect(decoyPiece).toBeTruthy();
+
+    act(() => {
+      result.current.onPieceClick(decoyPiece!);
+    });
+
+    expect(result.current.selectablePieceIds.has(decoyPiece!.id)).toBe(false);
+    expect(result.current.selectedPieceId).toBeNull();
   });
 });

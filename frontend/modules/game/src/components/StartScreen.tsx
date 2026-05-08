@@ -31,8 +31,8 @@ const ORDERED_DIFFICULTIES: Difficulty[] = ["medium", "easy", "hard"];
 const RULES = [
   "Rock beats Scissors | Paper beats Rock | Scissors beats Paper",
   "Find and defeat the enemy Flag-bearer to win",
-  "Decoy absorbs every attack, but the attacker can still lose",
-  "Memorize weapons during the 10-second reveal phase",
+  "The Decoy Totem stays still and defeats any enemy that attacks it",
+  "Shuffle first, then place both your Flag and Decoy during the reveal phase",
 ] as const;
 
 interface StartScreenProps {
@@ -106,6 +106,22 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, onOpenS
       window.removeEventListener("keydown", handleEscape);
     };
   }, [howToPlayOpen]);
+
+  const handleInviteFriend = () => {
+    if (typeof window === "undefined") return;
+
+    const inviteUrl = new URL(window.location.href);
+    inviteUrl.search = "";
+    inviteUrl.hash = "";
+
+    const shareText = `Join me in Squad RPS! ${inviteUrl.toString()}`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    const popup = window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+
+    if (!popup) {
+      window.location.href = whatsappUrl;
+    }
+  };
 
   return (
     <div
@@ -493,10 +509,18 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, onOpenS
             alignItems: "flex-end",
             gap: "6px",
             flexWrap: "wrap",
-            marginTop: "-18px",
+            marginTop: "-42px",
             paddingTop: "0",
           }}
         >
+          <div
+            style={{
+              display: "flex",
+              gap: "6px",
+              alignItems: "flex-end",
+              flexWrap: "wrap",
+            }}
+          >
           <button
             type="button"
             aria-label="How to play"
@@ -527,6 +551,58 @@ export function StartScreen({ difficulties, selected, onSelect, onStart, onOpenS
               }}
             />
           </button>
+
+          <div style={{ display: "contents" }}>
+            <button
+              type="button"
+              onClick={handleInviteFriend}
+              aria-label="Invite a friend on WhatsApp"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "clamp(136px, 11.4vw, 182px)",
+                minHeight: "clamp(40px, 3.2vw, 50px)",
+                padding: "7px 10px",
+                borderRadius: "14px",
+                border: "1px solid rgba(194,255,212,0.28)",
+                background: "linear-gradient(180deg, rgba(38, 124, 72, 0.94), rgba(18, 73, 44, 0.94))",
+                boxShadow: "0 10px 20px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.14)",
+                color: "#F4FFF7",
+                fontFamily: "var(--font-heading)",
+                fontSize: "clamp(0.74rem, 0.88vw, 0.94rem)",
+                lineHeight: "1.04",
+                letterSpacing: "0.02em",
+                textAlign: "center",
+                marginBottom: "26px",
+                cursor: "pointer",
+                transition: "transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-3px)";
+                e.currentTarget.style.boxShadow = "0 14px 24px rgba(0,0,0,0.28), 0 0 16px rgba(80, 214, 130, 0.26)";
+                e.currentTarget.style.filter = "brightness(1.04)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 10px 20px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.14)";
+                e.currentTarget.style.filter = "none";
+              }}
+            >
+              <span style={{ display: "none" }}>WA</span>
+
+              <span
+                style={{
+                  display: "none",
+                  direction: "rtl",
+                }}
+              >
+                הזמנת חבר למשחק
+              </span>
+              <span style={{ display: "block", whiteSpace: "nowrap" }}>Play With Friends</span>
+            </button>
+          </div>
+          </div>
 
           <div
             style={{
