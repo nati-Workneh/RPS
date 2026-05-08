@@ -4,6 +4,7 @@
   "installCommand": "echo skip",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/:path*", "destination": "https://rps-friend-api.onrender.com/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

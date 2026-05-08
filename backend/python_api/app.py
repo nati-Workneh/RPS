@@ -9,9 +9,9 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import REVEAL_SECONDS
-from .friend_mode import router as friend_router
-from .schemas import (
+from config import REVEAL_SECONDS
+from friend_mode import router as friend_router
+from schemas import (
     MatchCreateRequest,
     PlayerDecoyRequest,
     MatchSettingsUpdateRequest,
@@ -28,9 +28,12 @@ app = FastAPI(title="Squad RPS Python API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173",
-                   "http://localhost:5174", "http://127.0.0.1:5174",
-                   "http://localhost:5176", "http://127.0.0.1:5176"],
+    allow_origins=[
+        "https://rps-five-rose.vercel.app",
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:5174", "http://127.0.0.1:5174",
+        "http://localhost:5176", "http://127.0.0.1:5176",
+    ],
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_methods=["*"],
     allow_headers=["*"],
