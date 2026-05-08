@@ -6,7 +6,7 @@ export const PLAYER_ROWS  = [1, 2] as const;
 export const AI_ROWS      = [5, 6] as const;
 export const NEUTRAL_ROWS = [3, 4] as const;
 
-export const REVEAL_DURATION_SECONDS = 10;
+export const REVEAL_DURATION_SECONDS = 20;
 export const TURN_DURATION_SECONDS_BY_DIFFICULTY = {
   easy: 30,
   medium: 15,

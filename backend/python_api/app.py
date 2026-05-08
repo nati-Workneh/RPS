@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import REVEAL_SECONDS
 from .schemas import (
     MatchCreateRequest,
+    PlayerDecoyRequest,
     MatchSettingsUpdateRequest,
     PlayerFlagRequest,
     PlayerMoveRequest,
@@ -100,6 +101,8 @@ def find_piece_at(match_state: dict[str, Any], row: int, col: int) -> dict[str, 
 
 
 def get_valid_moves(piece: dict[str, Any], match_state: dict[str, Any]) -> list[dict[str, int]]:
+    if piece["role"] == "decoy":
+        return []
     dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
     moves: list[dict[str, int]] = []
     for dr, dc in dirs:
@@ -177,6 +180,13 @@ def selected_player_flag(match_state: dict[str, Any]) -> dict[str, Any] | None:
     )
 
 
+def selected_player_decoy(match_state: dict[str, Any]) -> dict[str, Any] | None:
+    return next(
+        (p for p in match_state["pieces"] if p["owner"] == "player" and p["alive"] and p["role"] == "decoy"),
+        None,
+    )
+
+
 def reveal_time_expired(match_state: dict[str, Any]) -> bool:
     return match_state["phase"] == "reveal" and time.time() >= match_state["reveal_ends_at"]
 
@@ -186,10 +196,13 @@ def turn_duration_for_difficulty(difficulty: str) -> int:
 
 
 def resolve_reveal_timeout(match_state: dict[str, Any]) -> bool:
-    if not reveal_time_expired(match_state) or selected_player_flag(match_state):
+    if (
+        not reveal_time_expired(match_state)
+        or (selected_player_flag(match_state) and selected_player_decoy(match_state))
+    ):
         return False
 
-    end_match(match_state, "ai", "Time ran out before you placed your flag.")
+    end_match(match_state, "ai", "Time ran out before you placed your flag and decoy.")
     return True
 
 
@@ -230,13 +243,18 @@ def assign_roles(match_state: dict[str, Any]) -> None:
     for owner in ("player", "ai"):
         pieces = [p for p in match_state["pieces"] if p["owner"] == owner and p["alive"]]
         chosen_flag = selected_player_flag(match_state) if owner == "player" else None
+        chosen_decoy = selected_player_decoy(match_state) if owner == "player" else None
 
         for piece in pieces:
             piece["role"] = "soldier"
 
         flag_piece = chosen_flag if chosen_flag in pieces else random.choice(pieces)
         decoy_pool = [piece for piece in pieces if piece["id"] != flag_piece["id"]]
-        decoy_piece = random.choice(decoy_pool)
+        decoy_piece = (
+            chosen_decoy
+            if chosen_decoy in decoy_pool and chosen_decoy["id"] != flag_piece["id"]
+            else random.choice(decoy_pool)
+        )
 
         flag_piece["role"] = "flag"
         decoy_piece["role"] = "decoy"
@@ -261,7 +279,7 @@ def visible_piece(piece: dict[str, Any], viewer: Owner, phase: Phase, finished: 
     show_weapon = phase == "reveal" or is_owner or reveal_all
     show_role   = (
         (is_owner and phase != "reveal")
-        or (is_owner and phase == "reveal" and piece["role"] == "flag")
+        or (is_owner and phase == "reveal" and piece["role"] in {"flag", "decoy"})
         or (reveal_all and piece["role"] != "soldier")
     )
 
@@ -349,6 +367,7 @@ def apply_duel_outcome(
     defender_weapon: Weapon,
     initiated_by: Owner,
 ) -> None:
+    decoy_victory = attacker["role"] == "decoy" or defender["role"] == "decoy"
     duel: dict[str, Any] = {
         "attackerId":      attacker["id"],
         "attackerName":    attacker["name"],
@@ -358,7 +377,7 @@ def apply_duel_outcome(
         "defenderWeapon":  defender_weapon,
         "winner":          winner,
         "tie":             False,
-        "decoyAbsorbed":   False,
+        "decoyAbsorbed":   decoy_victory,
     }
     attacker["weapon"] = attacker_weapon
     defender["weapon"] = defender_weapon
@@ -366,27 +385,27 @@ def apply_duel_outcome(
     match_state["known_player_weapons"][attacker["id"]] = attacker_weapon
     match_state["known_ai_weapons"][defender["id"]]     = defender_weapon
 
+    if decoy_victory:
+        match_state["stats"]["decoy_absorbed"] += 1
+
     if winner == "attacker":
-        if defender["role"] == "decoy":
-            duel["decoyAbsorbed"] = True
-            match_state["stats"]["decoy_absorbed"] += 1
-            match_state["message"] = f"{defender['name']} was the Decoy and absorbed the attack."
+        defender["alive"]    = False
+        duel["eliminatedId"] = defender["id"]
+        duel["revealedRole"] = defender["role"]
+        if attacker["owner"] == "player":
+            match_state["stats"]["player_duels_won"] += 1
         else:
-            defender["alive"]    = False
-            duel["eliminatedId"] = defender["id"]
-            duel["revealedRole"] = defender["role"]
-            if attacker["owner"] == "player":
-                match_state["stats"]["player_duels_won"] += 1
-            else:
-                match_state["stats"]["player_duels_lost"] += 1
-            if defender["role"] == "flag":
-                end_match(
-                    match_state,
-                    attacker["owner"],
-                    "Enemy flag captured." if attacker["owner"] == "player" else "Your flag was defeated.",
-                )
-            else:
-                match_state["message"] = f"{attacker['name']} won the duel."
+            match_state["stats"]["player_duels_lost"] += 1
+        if defender["role"] == "flag":
+            end_match(
+                match_state,
+                attacker["owner"],
+                "Enemy flag captured." if attacker["owner"] == "player" else "Your flag was defeated.",
+            )
+        elif attacker["role"] == "decoy":
+            match_state["message"] = f"{attacker['name']} dominated the enemy as the Decoy Totem."
+        else:
+            match_state["message"] = f"{attacker['name']} won the duel."
     else:
         attacker["alive"]    = False
         duel["eliminatedId"] = attacker["id"]
@@ -401,6 +420,8 @@ def apply_duel_outcome(
                 defender["owner"],
                 "Your flag was defeated." if defender["owner"] == "ai" else "Enemy flag captured.",
             )
+        elif defender["role"] == "decoy":
+            match_state["message"] = f"{defender['name']} held the line as the Decoy Totem."
         else:
             match_state["message"] = f"{defender['name']} defended successfully."
 
@@ -421,7 +442,12 @@ def resolve_attack(
 ) -> None:
     aw = attacker_weapon or attacker["weapon"]
     dw = defender_weapon or defender["weapon"]
-    outcome = duel_result(attacker, defender, aw, dw)
+    if attacker["role"] == "decoy":
+        outcome = "attacker"
+    elif defender["role"] == "decoy":
+        outcome = "defender"
+    else:
+        outcome = duel_result(attacker, defender, aw, dw)
 
     if outcome == "tie":
         match_state["phase"]        = "repick"
@@ -567,7 +593,7 @@ def create_match_state(difficulty: str, turn_duration_seconds: int) -> dict[str,
         "current_turn": "player",
         "started_at":   started_at,
         "reveal_ends_at": started_at + REVEAL_SECONDS,
-        "message":      "Memorize the enemy squad before the reveal timer ends.",
+        "message":      "Shuffle your squad, then place your flag and decoy before the reveal timer ends.",
         "pieces":       pieces,
         "turn_ends_at": None,
         "stats": {
@@ -614,8 +640,8 @@ def complete_reveal(match_id: str, _payload: RevealCompleteRequest) -> dict[str,
     if match_state["phase"] == "reveal":
         if resolve_reveal_timeout(match_state):
             return build_player_view(match_state)
-        if not selected_player_flag(match_state):
-            raise HTTPException(400, "Choose your flag before starting the match.")
+        if not selected_player_flag(match_state) or not selected_player_decoy(match_state):
+            raise HTTPException(400, "Choose your flag and decoy before starting the match.")
         assign_roles(match_state)
         match_state["phase"]        = "player_turn"
         match_state["current_turn"] = "player"
@@ -631,8 +657,8 @@ def shuffle_player_positions(match_id: str, _payload: ShuffleMatchRequest) -> di
         return build_player_view(match_state)
     if match_state["phase"] != "reveal":
         raise HTTPException(400, "You can only shuffle positions during the reveal phase.")
-    if selected_player_flag(match_state):
-        raise HTTPException(400, "Shuffle is only available before choosing your flag.")
+    if selected_player_flag(match_state) or selected_player_decoy(match_state):
+        raise HTTPException(400, "Shuffle is only available before choosing your special pieces.")
 
     shuffle_piece_positions(match_state, "player")
     match_state["message"] = "Your squad positions were shuffled."
@@ -656,13 +682,44 @@ def choose_player_flag(match_id: str, payload: PlayerFlagRequest) -> dict[str, A
     )
     if not player_piece:
         raise HTTPException(400, "Invalid player piece.")
+    if player_piece["role"] == "decoy":
+        raise HTTPException(400, "Choose a different piece for your flag.")
 
     for piece in match_state["pieces"]:
-        if piece["owner"] == "player" and piece["alive"]:
+        if piece["owner"] == "player" and piece["alive"] and piece["role"] == "flag":
             piece["role"] = "soldier"
 
     player_piece["role"] = "flag"
     match_state["message"] = f"Flag placed at row {player_piece['row']}, col {player_piece['col']}."
+    return build_player_view(match_state)
+
+
+@app.post("/api/match/{match_id}/decoy/player")
+def choose_player_decoy(match_id: str, payload: PlayerDecoyRequest) -> dict[str, Any]:
+    match_state = match_or_404(match_id)
+    if resolve_reveal_timeout(match_state):
+        return build_player_view(match_state)
+    if match_state["phase"] != "reveal":
+        raise HTTPException(400, "You can only choose your decoy during the reveal phase.")
+
+    player_piece = next(
+        (
+            p for p in match_state["pieces"]
+            if p["id"] == payload.piece_id and p["owner"] == "player" and p["alive"]
+        ),
+        None,
+    )
+    if not player_piece:
+        raise HTTPException(400, "Invalid player piece.")
+    if player_piece["role"] == "flag":
+        raise HTTPException(400, "Choose a different piece for your decoy.")
+
+    for piece in match_state["pieces"]:
+        if piece["owner"] == "player" and piece["alive"] and piece["role"] == "decoy":
+            piece["role"] = "soldier"
+
+    player_piece["role"] = "decoy"
+    match_state["message"] = f"Decoy placed at row {player_piece['row']}, col {player_piece['col']}."
     return build_player_view(match_state)
 
 
@@ -678,6 +735,8 @@ def player_move(match_id: str, payload: PlayerMoveRequest) -> dict[str, Any]:
                   if p["id"] == payload.piece_id and p["alive"] and p["owner"] == "player"), None)
     if not piece:
         raise HTTPException(400, "Invalid piece.")
+    if piece["role"] == "decoy":
+        raise HTTPException(400, "Your Decoy Totem cannot move.")
 
     if not is_adjacent(piece, payload.target_row, payload.target_col):
         raise HTTPException(400, "Target must be exactly one square away (N/S/E/W).")

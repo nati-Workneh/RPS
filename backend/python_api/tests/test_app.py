@@ -20,6 +20,19 @@ def choose_player_flag(created_match: dict, row: int = 1, col: int = 1) -> dict:
     return player_piece
 
 
+def choose_player_decoy(created_match: dict, row: int = 1, col: int = 2) -> dict:
+    player_piece = next(
+        piece for piece in created_match["board"]
+        if piece["owner"] == "player" and piece["row"] == row and piece["col"] == col
+    )
+    response = client.post(
+        f"/api/match/{created_match['matchId']}/decoy/player",
+        json={"pieceId": player_piece["id"]},
+    )
+    assert response.status_code == 200
+    return player_piece
+
+
 def test_health_returns_ok():
     response = client.get("/health")
     assert response.status_code == 200
@@ -57,7 +70,7 @@ def test_match_create_uses_turn_duration_by_difficulty():
     assert hard["turnDurationSeconds"] == 10
 
 
-def test_reveal_complete_requires_player_flag_choice():
+def test_reveal_complete_requires_player_flag_and_decoy_choice():
     MATCHES.clear()
     created = client.post("/api/match/create", json={"difficulty": "easy"}).json()
 
@@ -67,7 +80,7 @@ def test_reveal_complete_requires_player_flag_choice():
     )
 
     assert response.status_code == 400
-    assert "Choose your flag" in response.json()["detail"]
+    assert "Choose your flag and decoy" in response.json()["detail"]
 
 
 def test_reveal_timeout_without_flag_finishes_match_as_loss():
@@ -93,6 +106,7 @@ def test_reveal_assigns_one_player_flag_and_one_player_decoy():
     MATCHES.clear()
     created = client.post("/api/match/create", json={"difficulty": "easy"}).json()
     chosen_piece = choose_player_flag(created)
+    choose_player_decoy(created)
 
     response = client.post(
         f"/api/match/{created['matchId']}/reveal/complete",
@@ -173,7 +187,23 @@ def test_player_can_choose_flag_during_reveal_and_shuffle_locks_afterward():
     )
 
     assert shuffle_response.status_code == 400
-    assert "before choosing your flag" in shuffle_response.json()["detail"]
+    assert "before choosing your special pieces" in shuffle_response.json()["detail"]
+
+    reveal_response = client.post(
+        f"/api/match/{created['matchId']}/reveal/complete",
+        json={"confirmed": True},
+    )
+
+    assert reveal_response.status_code == 400
+    assert "Choose your flag and decoy" in reveal_response.json()["detail"]
+
+    decoy_piece = next(piece for piece in choose_payload["board"] if piece["owner"] == "player" and piece["row"] == 2 and piece["col"] == 4)
+    decoy_response = client.post(
+        f"/api/match/{created['matchId']}/decoy/player",
+        json={"pieceId": decoy_piece["id"]},
+    )
+
+    assert decoy_response.status_code == 200
 
     reveal_response = client.post(
         f"/api/match/{created['matchId']}/reveal/complete",
@@ -191,6 +221,7 @@ def test_player_can_make_opening_move_into_neutral_zone():
     MATCHES.clear()
     created = client.post("/api/match/create", json={"difficulty": "easy"}).json()
     choose_player_flag(created)
+    choose_player_decoy(created)
     revealed = client.post(
         f"/api/match/{created['matchId']}/reveal/complete",
         json={"confirmed": True},
@@ -220,6 +251,7 @@ def test_player_turn_timeout_finishes_match_as_loss():
     MATCHES.clear()
     created = client.post("/api/match/create", json={"difficulty": "easy"}).json()
     choose_player_flag(created)
+    choose_player_decoy(created)
     revealed = client.post(
         f"/api/match/{created['matchId']}/reveal/complete",
         json={"confirmed": True},
@@ -241,6 +273,7 @@ def test_ai_turn_timeout_awards_player_win():
     MATCHES.clear()
     created = client.post("/api/match/create", json={"difficulty": "easy"}).json()
     choose_player_flag(created)
+    choose_player_decoy(created)
     revealed = client.post(
         f"/api/match/{created['matchId']}/reveal/complete",
         json={"confirmed": True},
@@ -271,6 +304,7 @@ def test_ai_can_respond_after_player_opening_move():
     MATCHES.clear()
     created = client.post("/api/match/create", json={"difficulty": "easy"}).json()
     choose_player_flag(created)
+    choose_player_decoy(created)
     revealed = client.post(
         f"/api/match/{created['matchId']}/reveal/complete",
         json={"confirmed": True},
@@ -346,3 +380,67 @@ def test_capturing_flag_ends_match_immediately():
     assert payload["phase"] == "finished"
     assert payload["result"]["winner"] == "player"
     assert "flag" in payload["result"]["reason"].lower()
+
+
+def test_player_decoy_cannot_move():
+    MATCHES.clear()
+    created = client.post("/api/match/create", json={"difficulty": "easy"}).json()
+    choose_player_flag(created)
+    decoy_piece = choose_player_decoy(created)
+    revealed = client.post(
+        f"/api/match/{created['matchId']}/reveal/complete",
+        json={"confirmed": True},
+    ).json()
+
+    response = client.post(
+        f"/api/match/{created['matchId']}/turn/player-move",
+        json={"pieceId": decoy_piece["id"], "targetRow": 2, "targetCol": 2},
+    )
+
+    assert response.status_code == 400
+    assert "cannot move" in response.json()["detail"]
+
+
+def test_decoy_totem_always_defeats_the_attacker():
+    MATCHES.clear()
+    created = client.post("/api/match/create", json={"difficulty": "easy"}).json()
+    match_id = created["matchId"]
+    state = MATCHES[match_id]
+
+    attacker = state["pieces"][0]
+    defender = state["pieces"][-1]
+
+    for piece in state["pieces"]:
+        piece["alive"] = False
+
+    attacker["alive"] = True
+    attacker["owner"] = "ai"
+    attacker["row"] = 3
+    attacker["col"] = 1
+    attacker["weapon"] = "scissors"
+    attacker["role"] = "soldier"
+
+    defender["alive"] = True
+    defender["owner"] = "player"
+    defender["row"] = 2
+    defender["col"] = 1
+    defender["weapon"] = "paper"
+    defender["role"] = "decoy"
+
+    state["phase"] = "ai_turn"
+    state["current_turn"] = "ai"
+    state["last_duel"] = None
+    state["pending_repick"] = None
+    state["result"] = None
+    state["message"] = "AI is choosing..."
+
+    response = client.post(f"/api/match/{match_id}/turn/ai-move")
+
+    assert response.status_code == 200
+    payload = response.json()
+    duel = payload["duel"]
+
+    assert duel["winner"] == "defender"
+    assert duel["decoyAbsorbed"] is True
+    assert any(piece["id"] == defender["id"] and piece["alive"] for piece in payload["board"])
+    assert not any(piece["id"] == attacker["id"] and piece["alive"] for piece in payload["board"])

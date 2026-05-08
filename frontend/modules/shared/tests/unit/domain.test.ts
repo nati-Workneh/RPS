@@ -19,7 +19,7 @@ describe("Squad RPS Constants", () => {
   });
 
   it("should have canonical reveal duration", () => {
-    expect(REVEAL_DURATION_SECONDS).toBe(10);
+    expect(REVEAL_DURATION_SECONDS).toBe(20);
   });
 
   it("should have canonical turn duration", () => {

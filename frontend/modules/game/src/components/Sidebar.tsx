@@ -52,6 +52,9 @@ export function Sidebar({
   const hasPlayerFlag = match.board.some(
     (piece) => piece.owner === "player" && piece.alive && piece.role === "flag",
   );
+  const hasPlayerDecoy = match.board.some(
+    (piece) => piece.owner === "player" && piece.alive && piece.role === "decoy",
+  );
   const totalAlive  = aliveAi + alivePlayer;
   // Fraction of total alive that belongs to the player (0–1), clamped to [0.05, 0.95]
   const playerFrac  = totalAlive > 0
@@ -249,7 +252,7 @@ export function Sidebar({
         </div>
         <StatRow icon="⚔️" label="Duels Won"    value={stats.playerDuelsWon}  color="#44DD66" />
         <StatRow icon="🛡️" label="Duels Lost"   value={stats.playerDuelsLost} color="#FF4444" />
-        <StatRow icon="🎭" label="Decoy Blocks"  value={stats.decoyAbsorbed}   color="#CF6FFF" />
+        <StatRow icon="🎭" label="Decoy Wins"    value={stats.decoyAbsorbed}   color="#CF6FFF" />
         <StatRow icon="⚖️" label="Ties"          value={stats.tieSequences}    color="#FFAA22" />
       </div>
 
@@ -265,9 +268,11 @@ export function Sidebar({
       {phase === "reveal" && (
         <div style={{ ...GLASS, width: "100%", padding: "6px 8px" }}>
           <div style={{ fontFamily: "var(--font-ui)", fontSize: "0.5rem", color: "var(--color-text-muted)", lineHeight: "1.38" }}>
-            {hasPlayerFlag
-              ? "Flag locked in. You can still click another soldier to move it before the match starts."
-              : "At the start, you can shuffle your soldiers and then click one of them to choose where your flag will be placed."}
+            {!hasPlayerFlag
+              ? "At the start, your cursor is the flag. Shuffle first if you want, then click one soldier to place it."
+              : !hasPlayerDecoy
+              ? "Now your cursor is the Decoy Totem. Click a different soldier to place it."
+              : "Flag and Decoy Totem are locked in. You can now drag either one into place before you start."}
           </div>
         </div>
       )}
@@ -325,6 +330,7 @@ export function Sidebar({
               boxShadow:     loading ? "none" : "0 5px 12px rgba(0,0,0,0.22)",
               opacity:       loading ? 0.75 : 1,
               transition:    "transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease",
+              animation:     loading ? undefined : "shuffleAttention 1s ease-in-out infinite",
             }}
           >
             Shuffle Soldiers

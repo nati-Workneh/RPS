@@ -7,7 +7,11 @@ interface UnitSpriteProps {
   isValidTarget: boolean;
   isRevealPhase: boolean;
   isDying:       boolean;
+  isDragging?:   boolean;
   isMoving?:     boolean;
+  canDrag?:      boolean;
+  onDragStartPiece?: () => void;
+  onDragEndPiece?: () => void;
   onClick:       () => void;
 }
 
@@ -16,6 +20,7 @@ const PLAYER_IMG: Record<string, string> = {
   paper:    "/character_red_paper_nobg.png",
   scissors: "/logo_rps_online_nobg.png",
   flag:     "/character_red_flag_nobg.png",
+  decoy:    "/game_piece_totem_nobg.png",
   idle:     "/character_red_idle_nobg.png",
 };
 
@@ -25,6 +30,7 @@ const CPU_IMG: Record<string, string> = {
   paper:    "/character_blue_idle_nobg.png",
   scissors: "/character_blue_scissors_nobg.png",
   flag:     "/character_blue_flag_nobg.png",
+  decoy:    "/game_piece_totem_nobg.png",
   idle:     "/character_blue_idle_nobg.png",
 };
 
@@ -37,15 +43,28 @@ const WEAPON_ICON: Record<string, string> = {
 function getSrc(piece: Piece): string {
   if (piece.owner === "player") {
     if (piece.role === "flag") return PLAYER_IMG.flag;
+    if (piece.role === "decoy") return PLAYER_IMG.decoy;
     return (piece.weapon && PLAYER_IMG[piece.weapon]) ?? PLAYER_IMG.idle;
   }
   if (piece.silhouette) return CPU_IMG.hidden;
   if (piece.role === "flag") return CPU_IMG.flag;
+  if (piece.role === "decoy") return CPU_IMG.decoy;
   return (piece.weapon && CPU_IMG[piece.weapon]) ?? CPU_IMG.idle;
 }
 
 export function UnitSprite({
-  piece, selected, isSelectable, isValidTarget, isRevealPhase, isDying, isMoving = false, onClick,
+  piece,
+  selected,
+  isSelectable,
+  isValidTarget,
+  isRevealPhase,
+  isDying,
+  isDragging = false,
+  isMoving = false,
+  canDrag = false,
+  onDragStartPiece,
+  onDragEndPiece,
+  onClick,
 }: UnitSpriteProps) {
   const isPlayer = piece.owner === "player";
   const showWeapon = !piece.silhouette && piece.weapon;
@@ -82,6 +101,19 @@ export function UnitSprite({
     <button
       type="button"
       onClick={onClick}
+      draggable={canDrag}
+      onDragStart={(event) => {
+        if (!canDrag) {
+          event.preventDefault();
+          return;
+        }
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", piece.id);
+        onDragStartPiece?.();
+      }}
+      onDragEnd={() => {
+        onDragEndPiece?.();
+      }}
       data-piece-id={piece.id}
       data-owner={piece.owner}
       aria-label={`${isPlayer ? "Your" : "AI"} ${piece.role || "soldier"} ${piece.weapon || "hidden"} row ${piece.row} col ${piece.col}${selected ? ", selected" : ""}`}
@@ -94,12 +126,21 @@ export function UnitSprite({
         padding:      0,
         border:       "none",
         background:   "transparent",
-        cursor:       isValidTarget ? "crosshair" : isSelectable || isRevealFlagChoice ? "pointer" : "default",
+        cursor:       isDragging
+          ? "grabbing"
+          : canDrag
+          ? "grab"
+          : isValidTarget
+          ? "crosshair"
+          : isSelectable || isRevealFlagChoice
+          ? "pointer"
+          : "default",
         outline,
         borderRadius: "var(--radius-sm)",
         transform:    scale,
-        transition:   "transform 120ms ease, filter 120ms ease",
+        transition:   "transform 120ms ease, filter 120ms ease, opacity 120ms ease",
         filter,
+        opacity:      isDragging ? 0.38 : 1,
         animation:    isDying ? "unitDie 0.5s ease forwards" : undefined,
       }}
     >

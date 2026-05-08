@@ -112,6 +112,7 @@ function findPieceAt(state: InternalMatchState, row: number, col: number): Inter
 }
 
 function getValidMoves(piece: InternalPiece, state: InternalMatchState): Array<{ row: number; col: number }> {
+  if (piece.role === "decoy") return [];
   return [{ dr: 1, dc: 0 }, { dr: -1, dc: 0 }, { dr: 0, dc: 1 }, { dr: 0, dc: -1 }]
     .map(({ dr, dc }) => ({ row: piece.row + dr, col: piece.col + dc }))
     .filter(({ row, col }) => {
@@ -162,6 +163,10 @@ function selectedPlayerFlag(state: InternalMatchState): InternalPiece | undefine
   return state.pieces.find(p => p.owner === "player" && p.alive && p.role === "flag");
 }
 
+function selectedPlayerDecoy(state: InternalMatchState): InternalPiece | undefined {
+  return state.pieces.find(p => p.owner === "player" && p.alive && p.role === "decoy");
+}
+
 function timedTurnOwner(state: InternalMatchState): Owner | null {
   if (state.phase === "player_turn" || state.phase === "repick") return "player";
   if (state.phase === "ai_turn") return "ai";
@@ -177,8 +182,14 @@ function endMatch(state: InternalMatchState, winner: Owner, reason: string): voi
 }
 
 function resolveRevealTimeout(state: InternalMatchState): boolean {
-  if (state.phase !== "reveal" || nowSec() < state.revealEndsAt || selectedPlayerFlag(state)) return false;
-  endMatch(state, "ai", "Time ran out before you placed your flag.");
+  if (
+    state.phase !== "reveal" ||
+    nowSec() < state.revealEndsAt ||
+    (selectedPlayerFlag(state) && selectedPlayerDecoy(state))
+  ) {
+    return false;
+  }
+  endMatch(state, "ai", "Time ran out before you placed your flag and decoy.");
   return true;
 }
 
@@ -196,9 +207,14 @@ function assignRoles(state: InternalMatchState): void {
   for (const owner of ["player", "ai"] as Owner[]) {
     const pieces = state.pieces.filter(p => p.owner === owner && p.alive);
     const chosenFlag = owner === "player" ? selectedPlayerFlag(state) : undefined;
+    const chosenDecoy = owner === "player" ? selectedPlayerDecoy(state) : undefined;
     pieces.forEach(p => { p.role = "soldier"; });
     const flagPiece = (chosenFlag && pieces.includes(chosenFlag)) ? chosenFlag : randomChoice(pieces);
-    const decoyPiece = randomChoice(pieces.filter(p => p.id !== flagPiece.id));
+    const remainingPieces = pieces.filter(p => p.id !== flagPiece.id);
+    const decoyPiece =
+      chosenDecoy && chosenDecoy.id !== flagPiece.id && remainingPieces.includes(chosenDecoy)
+        ? chosenDecoy
+        : randomChoice(remainingPieces);
     flagPiece.role = "flag";
     decoyPiece.role = "decoy";
   }
@@ -211,7 +227,7 @@ function visiblePiece(piece: InternalPiece, phase: Phase, finished: boolean): Pi
   const showWeapon = phase === "reveal" || isOwner || finished;
   const showRole =
     (isOwner && phase !== "reveal") ||
-    (isOwner && phase === "reveal" && piece.role === "flag") ||
+    (isOwner && phase === "reveal" && (piece.role === "flag" || piece.role === "decoy")) ||
     (finished && piece.role !== "soldier");
 
   return {
@@ -282,10 +298,11 @@ function applyDuelOutcome(
   dw: Weapon,
   initiatedBy: Owner,
 ): void {
+  const decoyVictory = attacker.role === "decoy" || defender.role === "decoy";
   const duel: DuelSummary = {
     attackerId: attacker.id, attackerName: attacker.name, attackerWeapon: aw,
     defenderId: defender.id, defenderName: defender.name, defenderWeapon: dw,
-    winner, tie: false, decoyAbsorbed: false,
+    winner, tie: false, decoyAbsorbed: decoyVictory,
   };
 
   attacker.weapon = aw;
@@ -293,22 +310,22 @@ function applyDuelOutcome(
   state.knownPlayerWeapons[attacker.id] = aw;
   state.knownAiWeapons[defender.id] = dw;
 
+  if (decoyVictory) {
+    state.stats.decoyAbsorbed++;
+  }
+
   if (winner === "attacker") {
-    if (defender.role === "decoy") {
-      duel.decoyAbsorbed = true;
-      state.stats.decoyAbsorbed++;
-      state.message = `${defender.name} was the Decoy and absorbed the attack.`;
+    defender.alive = false;
+    duel.eliminatedId = defender.id;
+    duel.revealedRole = defender.role ?? undefined;
+    if (attacker.owner === "player") state.stats.playerDuelsWon++;
+    else state.stats.playerDuelsLost++;
+    if (defender.role === "flag") {
+      endMatch(state, attacker.owner, attacker.owner === "player" ? "Enemy flag captured." : "Your flag was defeated.");
+    } else if (attacker.role === "decoy") {
+      state.message = `${attacker.name} dominated the enemy as the Decoy Totem.`;
     } else {
-      defender.alive = false;
-      duel.eliminatedId = defender.id;
-      duel.revealedRole = defender.role ?? undefined;
-      if (attacker.owner === "player") state.stats.playerDuelsWon++;
-      else state.stats.playerDuelsLost++;
-      if (defender.role === "flag") {
-        endMatch(state, attacker.owner, attacker.owner === "player" ? "Enemy flag captured." : "Your flag was defeated.");
-      } else {
-        state.message = `${attacker.name} won the duel.`;
-      }
+      state.message = `${attacker.name} won the duel.`;
     }
   } else {
     attacker.alive = false;
@@ -318,6 +335,8 @@ function applyDuelOutcome(
     else state.stats.playerDuelsWon++;
     if (attacker.role === "flag") {
       endMatch(state, defender.owner, defender.owner === "ai" ? "Your flag was defeated." : "Enemy flag captured.");
+    } else if (defender.role === "decoy") {
+      state.message = `${defender.name} held the line as the Decoy Totem.`;
     } else {
       state.message = `${defender.name} defended successfully.`;
     }
@@ -341,7 +360,12 @@ function resolveAttack(
 ): void {
   const aw = attackerWeapon ?? attacker.weapon;
   const dw = defenderWeapon ?? defender.weapon;
-  const outcome = duelOutcome(aw, dw);
+  const outcome =
+    attacker.role === "decoy"
+      ? "attacker"
+      : defender.role === "decoy"
+      ? "defender"
+      : duelOutcome(aw, dw);
 
   if (outcome === "tie") {
     state.phase = "repick";
@@ -442,7 +466,7 @@ export function createMatch(difficulty: Difficulty, turnDurationSeconds: number)
     currentTurn: "player",
     startedAt,
     revealEndsAt: startedAt + REVEAL_DURATION_SECONDS,
-    message: "Memorize the enemy squad before the reveal timer ends.",
+    message: "Shuffle your squad, then place your flag and decoy before the reveal timer ends.",
     pieces: [...player, ...ai],
     turnEndsAt: null,
     stats: { playerDuelsWon: 0, playerDuelsLost: 0, tieSequences: 0, decoyAbsorbed: 0 },
@@ -471,7 +495,9 @@ export function completeReveal(matchId: string): MatchView {
   const state = getState(matchId);
   if (state.phase !== "reveal") return buildView(state);
   if (resolveRevealTimeout(state)) return buildView(state);
-  if (!selectedPlayerFlag(state)) throw new Error("Choose your flag before starting the match.");
+  if (!selectedPlayerFlag(state) || !selectedPlayerDecoy(state)) {
+    throw new Error("Choose your flag and decoy before starting the match.");
+  }
   assignRoles(state);
   state.phase = "player_turn";
   state.currentTurn = "player";
@@ -484,7 +510,9 @@ export function shufflePlayerPiecesEngine(matchId: string): MatchView {
   const state = getState(matchId);
   if (resolveRevealTimeout(state)) return buildView(state);
   if (state.phase !== "reveal") throw new Error("You can only shuffle during the reveal phase.");
-  if (selectedPlayerFlag(state)) throw new Error("Shuffle is only available before choosing your flag.");
+  if (selectedPlayerFlag(state) || selectedPlayerDecoy(state)) {
+    throw new Error("Shuffle is only available before choosing your special pieces.");
+  }
   const positions = fisherYatesShuffle(startPositionsFor("player"));
   const pieces = state.pieces.filter(p => p.owner === "player" && p.alive);
   pieces.forEach((p, i) => { p.row = positions[i].row; p.col = positions[i].col; });
@@ -498,9 +526,63 @@ export function choosePlayerFlagEngine(matchId: string, pieceId: string): MatchV
   if (state.phase !== "reveal") throw new Error("You can only choose your flag during the reveal phase.");
   const piece = state.pieces.find(p => p.id === pieceId && p.owner === "player" && p.alive);
   if (!piece) throw new Error("Invalid player piece.");
-  state.pieces.filter(p => p.owner === "player" && p.alive).forEach(p => { p.role = "soldier"; });
+  if (piece.role === "decoy") throw new Error("Choose a different piece for your flag.");
+  state.pieces
+    .filter(p => p.owner === "player" && p.alive && p.role === "flag")
+    .forEach(p => { p.role = "soldier"; });
   piece.role = "flag";
   state.message = `Flag placed at row ${piece.row}, col ${piece.col}.`;
+  return buildView(state);
+}
+
+export function choosePlayerDecoyEngine(matchId: string, pieceId: string): MatchView {
+  const state = getState(matchId);
+  if (resolveRevealTimeout(state)) return buildView(state);
+  if (state.phase !== "reveal") throw new Error("You can only choose your decoy during the reveal phase.");
+  const piece = state.pieces.find(p => p.id === pieceId && p.owner === "player" && p.alive);
+  if (!piece) throw new Error("Invalid player piece.");
+  if (piece.role === "flag") throw new Error("Choose a different piece for your decoy.");
+  state.pieces
+    .filter(p => p.owner === "player" && p.alive && p.role === "decoy")
+    .forEach(p => { p.role = "soldier"; });
+  piece.role = "decoy";
+  state.message = `Decoy placed at row ${piece.row}, col ${piece.col}.`;
+  return buildView(state);
+}
+
+export function swapPlayerRevealPieceEngine(matchId: string, pieceId: string, targetRow: number, targetCol: number): MatchView {
+  const state = getState(matchId);
+  if (resolveRevealTimeout(state)) return buildView(state);
+  if (state.phase !== "reveal") throw new Error("You can only rearrange pieces during the reveal phase.");
+  if (!PLAYER_START_ROWS.includes(targetRow)) throw new Error("You can only arrange pieces within your own starting rows.");
+  if (targetCol < 1 || targetCol > BOARD_COLS) throw new Error("Target is out of bounds.");
+
+  const piece = state.pieces.find(p => p.id === pieceId && p.owner === "player" && p.alive);
+  if (!piece) throw new Error("Invalid player piece.");
+  if (piece.row === targetRow && piece.col === targetCol) return buildView(state);
+
+  const occupant = findPieceAt(state, targetRow, targetCol);
+  if (occupant && occupant.owner !== "player") throw new Error("You can only arrange your own squad during the reveal phase.");
+
+  const previousRow = piece.row;
+  const previousCol = piece.col;
+
+  if (occupant && occupant.id !== piece.id) {
+    occupant.row = previousRow;
+    occupant.col = previousCol;
+  }
+
+  piece.row = targetRow;
+  piece.col = targetCol;
+
+  if (piece.role === "flag") {
+    state.message = `Flag moved to row ${targetRow}, col ${targetCol}.`;
+  } else if (piece.role === "decoy") {
+    state.message = `Decoy Totem moved to row ${targetRow}, col ${targetCol}.`;
+  } else {
+    state.message = "Your squad formation was updated.";
+  }
+
   return buildView(state);
 }
 
@@ -510,6 +592,7 @@ export function playerMoveEngine(matchId: string, pieceId: string, targetRow: nu
   if (state.phase !== "player_turn") throw new Error("It is not the player's turn.");
   const piece = state.pieces.find(p => p.id === pieceId && p.alive && p.owner === "player");
   if (!piece) throw new Error("Invalid piece.");
+  if (piece.role === "decoy") throw new Error("Your Decoy Totem cannot move.");
   if (!isAdjacent(piece, targetRow, targetCol)) throw new Error("Target must be exactly one square away.");
   if (targetRow < 1 || targetRow > BOARD_ROWS || targetCol < 1 || targetCol > BOARD_COLS)
     throw new Error("Target is out of bounds.");
