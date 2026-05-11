@@ -1,4 +1,6 @@
 # Squad RPS — Team 10
+<img width="1503" height="1047" alt="769bed93-54f3-4d1e-80ba-7b30deeea708" src="https://github.com/user-attachments/assets/e334c8cc-304b-44b6-9660-fb31885ea498" />
+
 
 משחק טקטי בדפדפן — שחקן מול מחשב, בסגנון RPS Online.
 מבנה: React + TypeScript + Vite (frontend) | Python + FastAPI (backend).
